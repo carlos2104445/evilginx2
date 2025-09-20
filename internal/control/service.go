@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kgretzky/evilginx2/core"
 	"github.com/kgretzky/evilginx2/internal/storage"
 	"github.com/kgretzky/evilginx2/log"
 	"github.com/kgretzky/evilginx2/pkg/models"
@@ -285,7 +284,7 @@ func (s *ControlService) convertPhishletToProto(phishlet *models.Phishlet) *prot
 			PhishSubdomain: ph.PhishSubdomain,
 			OrigSubdomain:  ph.OrigSubdomain,
 			Domain:         ph.Domain,
-			HandleSession:  ph.HandleSession,
+			HandleSession:  fmt.Sprintf("%t", ph.HandleSession),
 			IsLanding:      ph.IsLanding,
 			AutoFilter:     ph.AutoFilter,
 		}

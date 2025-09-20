@@ -124,7 +124,7 @@ message ProxyHost {
   string phish_subdomain = 1;
   string orig_subdomain = 2;
   string domain = 3;
-  string handle_session = 4;
+  bool handle_session = 4;
   bool is_landing = 5;
   bool auto_filter = 6;
 }
