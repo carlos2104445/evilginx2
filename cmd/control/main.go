@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/kgretzky/evilginx2/internal/api"
+	"github.com/kgretzky/evilginx2/internal/phishlet"
 	"github.com/kgretzky/evilginx2/internal/storage"
 	"github.com/kgretzky/evilginx2/pkg/models"
 )
@@ -54,7 +55,9 @@ func main() {
 		}
 	}
 
-	server := api.NewServer(storage, config, *port)
+	phishletRepo := phishlet.NewPhishletRepository(storage, "")
+	
+	server := api.NewServer(storage, config, *port, phishletRepo)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

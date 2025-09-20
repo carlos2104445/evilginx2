@@ -2,7 +2,6 @@ package phishlet
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -42,15 +41,21 @@ func NewPhishletRepository(storage storage.Interface, gitRepo string) *PhishletR
 }
 
 func (pr *PhishletRepository) ListVersions(ctx context.Context, name string) ([]*PhishletVersion, error) {
-	key := fmt.Sprintf("phishlet_versions:%s", name)
-	data, err := pr.storage.Get(ctx, key)
+	storageVersions, err := pr.storage.ListPhishletVersions(ctx, name)
 	if err != nil {
 		return []*PhishletVersion{}, nil
 	}
 	
 	var versions []*PhishletVersion
-	if err := json.Unmarshal([]byte(data), &versions); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal versions: %v", err)
+	for _, sv := range storageVersions {
+		versions = append(versions, &PhishletVersion{
+			Version:     sv.Version,
+			Author:      sv.Author,
+			Description: sv.Description,
+			CreatedAt:   sv.CreatedAt,
+			Hash:        sv.Hash,
+			Content:     sv.Content,
+		})
 	}
 	
 	return versions, nil
@@ -90,7 +95,7 @@ func (pr *PhishletRepository) PublishVersion(ctx context.Context, phishlet *mode
 		}
 	}
 	
-	newVersion := &PhishletVersion{
+	newVersion := &storage.PhishletVersion{
 		Version:     version,
 		Author:      phishlet.Author,
 		Description: description,
@@ -99,28 +104,24 @@ func (pr *PhishletRepository) PublishVersion(ctx context.Context, phishlet *mode
 		Content:     "",
 	}
 	
-	versions = append(versions, newVersion)
-	
-	data, err := json.Marshal(versions)
-	if err != nil {
-		return fmt.Errorf("failed to marshal versions: %v", err)
-	}
-	
-	key := fmt.Sprintf("phishlet_versions:%s", phishlet.Name)
-	return pr.storage.Set(ctx, key, string(data))
+	return pr.storage.CreatePhishletVersion(ctx, phishlet.Name, newVersion)
 }
 
 func (pr *PhishletRepository) CreateFlowSession(ctx context.Context, session *FlowSession) error {
 	session.CreatedAt = time.Now().UTC()
 	session.UpdatedAt = time.Now().UTC()
 	
-	data, err := json.Marshal(session)
-	if err != nil {
-		return fmt.Errorf("failed to marshal flow session: %v", err)
+	storageSession := &storage.FlowSession{
+		ID:           session.ID,
+		PhishletName: session.PhishletName,
+		FlowName:     session.FlowName,
+		CurrentStep:  session.CurrentStep,
+		StepData:     session.StepData,
+		CreatedAt:    session.CreatedAt,
+		UpdatedAt:    session.UpdatedAt,
 	}
 	
-	key := fmt.Sprintf("flow_session:%s", session.ID)
-	return pr.storage.Set(ctx, key, string(data))
+	return pr.storage.CreateFlowSession(ctx, storageSession)
 }
 
 func (pr *PhishletRepository) UpdateFlowSession(ctx context.Context, sessionID string, step string, data map[string]string) error {
@@ -144,18 +145,22 @@ func (pr *PhishletRepository) UpdateFlowSession(ctx context.Context, sessionID s
 }
 
 func (pr *PhishletRepository) GetFlowSession(ctx context.Context, sessionID string) (*FlowSession, error) {
-	key := fmt.Sprintf("flow_session:%s", sessionID)
-	data, err := pr.storage.Get(ctx, key)
+	storageSession, err := pr.storage.GetFlowSession(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("flow session not found: %s", sessionID)
 	}
 	
-	var session FlowSession
-	if err := json.Unmarshal([]byte(data), &session); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal flow session: %v", err)
+	session := &FlowSession{
+		ID:           storageSession.ID,
+		PhishletName: storageSession.PhishletName,
+		FlowName:     storageSession.FlowName,
+		CurrentStep:  storageSession.CurrentStep,
+		StepData:     storageSession.StepData,
+		CreatedAt:    storageSession.CreatedAt,
+		UpdatedAt:    storageSession.UpdatedAt,
 	}
 	
-	return &session, nil
+	return session, nil
 }
 
 func generateHash(input string) string {
