@@ -97,6 +97,9 @@ func (t *Terminal) DoWork() {
 			continue
 		} else if err == io.EOF {
 			break
+		} else if err != nil {
+			log.Error("readline error: %v", err)
+			continue
 		}
 
 		line = strings.TrimSpace(line)

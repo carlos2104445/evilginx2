@@ -52,6 +52,12 @@ func (o *Nameserver) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 	m.SetReply(r)
 
 	if o.cfg.general.Domain == "" || o.cfg.general.ExternalIpv4 == "" {
+		w.WriteMsg(m)
+		return
+	}
+	
+	if len(r.Question) == 0 {
+		w.WriteMsg(m)
 		return
 	}
 
@@ -92,7 +98,10 @@ func (o *Nameserver) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 			}
 		}
 	}
-	w.WriteMsg(m)
+	
+	if err := w.WriteMsg(m); err != nil {
+		log.Error("DNS: failed to write response: %v", err)
+	}
 }
 
 func pdom(domain string) string {

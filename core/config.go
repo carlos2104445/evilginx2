@@ -140,7 +140,7 @@ func NewConfig(cfg_dir string, path string) (*Config, error) {
 
 	err = c.cfg.ReadInConfig()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read config file: %v", err)
 	}
 
 	c.cfg.UnmarshalKey(CFG_GENERAL, &c.general)
@@ -188,7 +188,9 @@ func NewConfig(cfg_dir string, path string) (*Config, error) {
 		c.lureIds = append(c.lureIds, GenRandomToken())
 	}
 
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Warning("failed to write config: %v", err)
+	}
 	return c, nil
 }
 
@@ -209,7 +211,9 @@ func (c *Config) PhishletConfig(site string) *PhishletConfig {
 
 func (c *Config) SavePhishlets() {
 	c.cfg.Set(CFG_PHISHLETS, c.phishletConfig)
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to save phishlets config: %v", err)
+	}
 }
 
 func (c *Config) SetSiteHostname(site string, hostname string) bool {
@@ -263,21 +267,27 @@ func (c *Config) SetBaseDomain(domain string) {
 	c.general.Domain = domain
 	c.cfg.Set(CFG_GENERAL, c.general)
 	log.Info("server domain set to: %s", domain)
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) SetServerIP(ip_addr string) {
 	c.general.OldIpv4 = ip_addr
 	c.cfg.Set(CFG_GENERAL, c.general)
 	//log.Info("server IP set to: %s", ip_addr)
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) SetServerExternalIP(ip_addr string) {
 	c.general.ExternalIpv4 = ip_addr
 	c.cfg.Set(CFG_GENERAL, c.general)
 	log.Info("server external IP set to: %s", ip_addr)
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) SetServerBindIP(ip_addr string) {
@@ -285,21 +295,27 @@ func (c *Config) SetServerBindIP(ip_addr string) {
 	c.cfg.Set(CFG_GENERAL, c.general)
 	log.Info("server bind IP set to: %s", ip_addr)
 	log.Warning("you may need to restart evilginx for the changes to take effect")
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) SetHttpsPort(port int) {
 	c.general.HttpsPort = port
 	c.cfg.Set(CFG_GENERAL, c.general)
 	log.Info("https port set to: %d", port)
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) SetDnsPort(port int) {
 	c.general.DnsPort = port
 	c.cfg.Set(CFG_GENERAL, c.general)
 	log.Info("dns port set to: %d", port)
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) EnableProxy(enabled bool) {
@@ -310,7 +326,9 @@ func (c *Config) EnableProxy(enabled bool) {
 	} else {
 		log.Info("disabled proxy")
 	}
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) SetProxyType(ptype string) {
@@ -322,35 +340,45 @@ func (c *Config) SetProxyType(ptype string) {
 	c.proxyConfig.Type = ptype
 	c.cfg.Set(CFG_PROXY, c.proxyConfig)
 	log.Info("proxy type set to: %s", ptype)
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) SetProxyAddress(address string) {
 	c.proxyConfig.Address = address
 	c.cfg.Set(CFG_PROXY, c.proxyConfig)
 	log.Info("proxy address set to: %s", address)
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) SetProxyPort(port int) {
 	c.proxyConfig.Port = port
-	c.cfg.Set(CFG_PROXY, c.proxyConfig.Port)
+	c.cfg.Set(CFG_PROXY, c.proxyConfig)
 	log.Info("proxy port set to: %d", port)
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) SetProxyUsername(username string) {
 	c.proxyConfig.Username = username
 	c.cfg.Set(CFG_PROXY, c.proxyConfig)
 	log.Info("proxy username set to: %s", username)
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) SetProxyPassword(password string) {
 	c.proxyConfig.Password = password
 	c.cfg.Set(CFG_PROXY, c.proxyConfig)
 	log.Info("proxy password set to: %s", password)
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) SetGoPhishAdminUrl(k string) {
@@ -363,21 +391,27 @@ func (c *Config) SetGoPhishAdminUrl(k string) {
 	c.gophishConfig.AdminUrl = u.String()
 	c.cfg.Set(CFG_GOPHISH, c.gophishConfig)
 	log.Info("gophish admin url set to: %s", u.String())
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) SetGoPhishApiKey(k string) {
 	c.gophishConfig.ApiKey = k
 	c.cfg.Set(CFG_GOPHISH, c.gophishConfig)
 	log.Info("gophish api key set to: %s", k)
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) SetGoPhishInsecureTLS(k bool) {
 	c.gophishConfig.InsecureTLS = k
 	c.cfg.Set(CFG_GOPHISH, c.gophishConfig)
 	log.Info("gophish insecure set to: %v", k)
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) IsLureHostnameValid(hostname string) bool {
@@ -472,8 +506,10 @@ func (c *Config) GetEnabledSites() []string {
 func (c *Config) SetBlacklistMode(mode string) {
 	if stringExists(mode, BLACKLIST_MODES) {
 		c.blacklistConfig.Mode = mode
-		c.cfg.Set(CFG_BLACKLIST, c.blacklistConfig)
-		c.cfg.WriteConfig()
+	c.cfg.Set(CFG_BLACKLIST, c.blacklistConfig)
+		if err := c.cfg.WriteConfig(); err != nil {
+			log.Error("failed to write config: %v", err)
+		}
 	}
 	log.Info("blacklist mode set to: %s", mode)
 }
@@ -482,7 +518,9 @@ func (c *Config) SetUnauthUrl(_url string) {
 	c.general.UnauthUrl = _url
 	c.cfg.Set(CFG_GENERAL, c.general)
 	log.Info("unauthorized request redirection URL set to: %s", _url)
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) EnableAutocert(enabled bool) {
@@ -493,7 +531,9 @@ func (c *Config) EnableAutocert(enabled bool) {
 		log.Info("autocert is now disabled")
 	}
 	c.cfg.Set(CFG_GENERAL, c.general)
-	c.cfg.WriteConfig()
+	if err := c.cfg.WriteConfig(); err != nil {
+		log.Error("failed to write config: %v", err)
+	}
 }
 
 func (c *Config) refreshActiveHostnames() {

@@ -134,7 +134,11 @@ func (s *Session) Finish(is_auth_url bool) {
 		s.IsDone = true
 		s.IsAuthUrl = is_auth_url
 		if s.DoneSignal != nil {
-			close(s.DoneSignal)
+			select {
+			case <-s.DoneSignal:
+			default:
+				close(s.DoneSignal)
+			}
 			s.DoneSignal = nil
 		}
 	}

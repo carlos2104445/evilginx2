@@ -251,7 +251,66 @@ func (o *CertDb) setUnmanagedSync(verbose bool) error {
 }
 
 func (o *CertDb) reloadCertificates() error {
-	// TODO: load private certificates from disk
+	sitesDir := filepath.Join(o.cache_dir, "sites")
+	
+	if _, err := os.Stat(sitesDir); os.IsNotExist(err) {
+		return nil
+	}
+	
+	files, err := os.ReadDir(sitesDir)
+	if err != nil {
+		return fmt.Errorf("failed to read sites directory: %v", err)
+	}
+	
+	for _, f := range files {
+		if f.IsDir() {
+			certDir := filepath.Join(sitesDir, f.Name())
+			
+			certFiles, err := os.ReadDir(certDir)
+			if err != nil {
+				log.Warning("cert_db: failed to read certificate directory '%s': %v", certDir, err)
+				continue
+			}
+			
+			var certPath, keyPath string
+			
+			for _, cf := range certFiles {
+				if !cf.IsDir() {
+					switch strings.ToLower(filepath.Ext(cf.Name())) {
+					case ".pem":
+						if cf.Name() == "fullchain.pem" {
+							certPath = filepath.Join(certDir, cf.Name())
+						} else if cf.Name() == "privkey.pem" {
+							keyPath = filepath.Join(certDir, cf.Name())
+						} else if certPath == "" {
+							certPath = filepath.Join(certDir, cf.Name())
+						}
+					case ".crt":
+						if certPath == "" {
+							certPath = filepath.Join(certDir, cf.Name())
+						}
+					case ".key":
+						if keyPath == "" {
+							keyPath = filepath.Join(certDir, cf.Name())
+						}
+					}
+				}
+			}
+			
+			if certPath != "" && keyPath != "" {
+				cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+				if err != nil {
+					log.Warning("cert_db: failed to load certificate pair from %s: %v", certDir, err)
+					continue
+				}
+				
+				hostname := f.Name()
+				o.tlsCache[hostname] = &cert
+				log.Debug("cert_db: loaded private certificate for hostname: %s", hostname)
+			}
+		}
+	}
+	
 	return nil
 }
 
@@ -330,7 +389,7 @@ func (o *CertDb) getSelfSignedCertificate(host string, phish_host string, port i
 	}
 
 	var pkey *rsa.PrivateKey
-	if pkey, err = rsa.GenerateKey(rand.Reader, 1024); err != nil {
+	if pkey, err = rsa.GenerateKey(rand.Reader, 2048); err != nil {
 		return
 	}
 

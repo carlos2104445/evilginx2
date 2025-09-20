@@ -27,7 +27,11 @@ func NewBlacklist(path string) (*Blacklist, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			log.Error("blacklist: failed to close file: %v", closeErr)
+		}
+	}()
 
 	bl := &Blacklist{
 		ips:        make(map[string]*BlockIP),
@@ -90,7 +94,11 @@ func (bl *Blacklist) AddIP(ip string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			log.Error("blacklist: failed to close file: %v", closeErr)
+		}
+	}()
 
 	_, err = f.WriteString(ipv4.String() + "\n")
 	if err != nil {

