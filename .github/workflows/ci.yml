@@ -113,7 +113,7 @@ jobs:
     
     - name: Build Go application
       run: |
-        go build -v -o evilginx2 ./cmd/evilginx2
+        go build -v -o evilginx2 .
         ./evilginx2 -version || true
     
     - name: Set up Node.js
