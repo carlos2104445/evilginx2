@@ -7,37 +7,45 @@ import (
 	"github.com/kgretzky/evilginx2/pkg/models"
 )
 
+type SessionFilters struct {
+	PhishletName string
+	Username     string
+	StartTime    *time.Time
+	EndTime      *time.Time
+	Limit        int
+	Offset       int
+}
+
+type PhishletFilters struct {
+	Name    string
+	Enabled *bool
+	Limit   int
+	Offset  int
+}
+
 type Interface interface {
-	Set(ctx context.Context, key, value string) error
-	Get(ctx context.Context, key string) (string, error)
-	Delete(ctx context.Context, key string) error
-	List(ctx context.Context, prefix string) ([]string, error)
-	Close() error
+	CreateSession(ctx context.Context, session *models.Session) error
+	GetSession(ctx context.Context, id string) (*models.Session, error)
+	GetSessionByIndex(ctx context.Context, index int) (*models.Session, error)
+	ListSessions(ctx context.Context, filters *SessionFilters) ([]*models.Session, error)
+	UpdateSession(ctx context.Context, session *models.Session) error
+	DeleteSession(ctx context.Context, id string) error
 
 	CreatePhishlet(ctx context.Context, phishlet *models.Phishlet) error
 	GetPhishlet(ctx context.Context, name string) (*models.Phishlet, error)
+	ListPhishlets(ctx context.Context, filters *PhishletFilters) ([]*models.Phishlet, error)
 	UpdatePhishlet(ctx context.Context, phishlet *models.Phishlet) error
 	DeletePhishlet(ctx context.Context, name string) error
-	ListPhishlets(ctx context.Context) ([]*models.Phishlet, error)
 
-	CreateSession(ctx context.Context, session *models.Session) error
-	GetSession(ctx context.Context, id string) (*models.Session, error)
-	UpdateSession(ctx context.Context, session *models.Session) error
-	DeleteSession(ctx context.Context, id string) error
-	ListSessions(ctx context.Context) ([]*models.Session, error)
+	GetConfig(ctx context.Context) (*models.Config, error)
+	UpdateConfig(ctx context.Context, config *models.Config) error
 
 	CreateLure(ctx context.Context, lure *models.Lure) error
 	GetLure(ctx context.Context, id string) (*models.Lure, error)
+	ListLures(ctx context.Context) ([]*models.Lure, error)
 	UpdateLure(ctx context.Context, lure *models.Lure) error
 	DeleteLure(ctx context.Context, id string) error
-	ListLures(ctx context.Context) ([]*models.Lure, error)
 
-	SetConfig(ctx context.Context, key, value string) error
-	GetConfig(ctx context.Context, key string) (string, error)
-	DeleteConfig(ctx context.Context, key string) error
-	ListConfig(ctx context.Context) (map[string]string, error)
-
-	
 	CreatePhishletVersion(ctx context.Context, name string, version *PhishletVersion) error
 	ListPhishletVersions(ctx context.Context, name string) ([]*PhishletVersion, error)
 	GetPhishletVersion(ctx context.Context, name, version string) (*models.Phishlet, error)
@@ -46,6 +54,9 @@ type Interface interface {
 	UpdateFlowSession(ctx context.Context, sessionID string, step string, data map[string]string) error
 	GetFlowSession(ctx context.Context, sessionID string) (*FlowSession, error)
 	DeleteFlowSession(ctx context.Context, sessionID string) error
+
+	Close() error
+	Flush() error
 }
 
 type PhishletVersion struct {

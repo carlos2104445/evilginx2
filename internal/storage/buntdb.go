@@ -7,354 +7,419 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tidwall/buntdb"
 	"github.com/kgretzky/evilginx2/pkg/models"
+	"github.com/tidwall/buntdb"
+)
+
+const (
+	SessionTable  = "sessions"
+	PhishletTable = "phishlets"
+	ConfigTable   = "config"
+	LureTable     = "lures"
 )
 
 type BuntDBStorage struct {
-	db *buntdb.DB
+	db   *buntdb.DB
+	path string
 }
 
 func NewBuntDBStorage(path string) (*BuntDBStorage, error) {
 	db, err := buntdb.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open BuntDB: %v", err)
+		return nil, fmt.Errorf("failed to open buntdb: %w", err)
 	}
-	
-	return &BuntDBStorage{db: db}, nil
+
+	storage := &BuntDBStorage{
+		db:   db,
+		path: path,
+	}
+
+	if err := storage.init(); err != nil {
+		return nil, fmt.Errorf("failed to initialize storage: %w", err)
+	}
+
+	return storage, nil
 }
 
-func (s *BuntDBStorage) Close() error {
-	return s.db.Close()
-}
-
-func (s *BuntDBStorage) Set(ctx context.Context, key, value string) error {
+func (s *BuntDBStorage) init() error {
 	return s.db.Update(func(tx *buntdb.Tx) error {
-		_, _, err := tx.Set(key, value, nil)
+		tx.CreateIndex("sessions_id", SessionTable+":*", buntdb.IndexJSON("id"))
+		tx.CreateIndex("sessions_index", SessionTable+":*", buntdb.IndexJSON("index"))
+		tx.CreateIndex("sessions_phishlet", SessionTable+":*", buntdb.IndexJSON("phishlet_name"))
+		tx.CreateIndex("phishlets_name", PhishletTable+":*", buntdb.IndexJSON("name"))
+		tx.CreateIndex("lures_id", LureTable+":*", buntdb.IndexJSON("id"))
+		return nil
+	})
+}
+
+func (s *BuntDBStorage) CreateSession(ctx context.Context, session *models.Session) error {
+	if session.CreateTime.IsZero() {
+		session.CreateTime = time.Now().UTC()
+	}
+	session.UpdateTime = time.Now().UTC()
+
+	data, err := json.Marshal(session)
+	if err != nil {
+		return fmt.Errorf("failed to marshal session: %w", err)
+	}
+
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey(SessionTable, session.ID)
+		_, _, err := tx.Set(key, string(data), nil)
 		return err
 	})
 }
 
-func (s *BuntDBStorage) Get(ctx context.Context, key string) (string, error) {
-	var value string
+func (s *BuntDBStorage) GetSession(ctx context.Context, id string) (*models.Session, error) {
+	var session models.Session
 	err := s.db.View(func(tx *buntdb.Tx) error {
+		key := s.genKey(SessionTable, id)
 		val, err := tx.Get(key)
 		if err != nil {
 			return err
 		}
-		value = val
-		return nil
+		return json.Unmarshal([]byte(val), &session)
 	})
-	return value, err
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+	return &session, nil
 }
 
-func (s *BuntDBStorage) Delete(ctx context.Context, key string) error {
+func (s *BuntDBStorage) GetSessionByIndex(ctx context.Context, index int) (*models.Session, error) {
+	var session models.Session
+	found := false
+
+	err := s.db.View(func(tx *buntdb.Tx) error {
+		return tx.AscendEqual("sessions_index", s.getPivot(map[string]int{"index": index}), func(key, val string) bool {
+			if err := json.Unmarshal([]byte(val), &session); err == nil {
+				found = true
+			}
+			return false
+		})
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session by index: %w", err)
+	}
+	if !found {
+		return nil, fmt.Errorf("session not found with index: %d", index)
+	}
+
+	return &session, nil
+}
+
+func (s *BuntDBStorage) ListSessions(ctx context.Context, filters *SessionFilters) ([]*models.Session, error) {
+	var sessions []*models.Session
+	
+	err := s.db.View(func(tx *buntdb.Tx) error {
+		count := 0
+		return tx.Ascend("sessions_id", func(key, val string) bool {
+			if filters != nil && filters.Offset > 0 && count < filters.Offset {
+				count++
+				return true
+			}
+			
+			if filters != nil && filters.Limit > 0 && len(sessions) >= filters.Limit {
+				return false
+			}
+
+			var session models.Session
+			if err := json.Unmarshal([]byte(val), &session); err == nil {
+				if filters == nil || s.matchesSessionFilters(&session, filters) {
+					sessions = append(sessions, &session)
+				}
+			}
+			count++
+			return true
+		})
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to list sessions: %w", err)
+	}
+	return sessions, nil
+}
+
+func (s *BuntDBStorage) UpdateSession(ctx context.Context, session *models.Session) error {
+	session.UpdateTime = time.Now().UTC()
+	
+	data, err := json.Marshal(session)
+	if err != nil {
+		return fmt.Errorf("failed to marshal session: %w", err)
+	}
+
 	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey(SessionTable, session.ID)
+		_, _, err := tx.Set(key, string(data), nil)
+		return err
+	})
+}
+
+func (s *BuntDBStorage) DeleteSession(ctx context.Context, id string) error {
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey(SessionTable, id)
 		_, err := tx.Delete(key)
 		return err
 	})
 }
 
-func (s *BuntDBStorage) List(ctx context.Context, prefix string) ([]string, error) {
-	var keys []string
-	err := s.db.View(func(tx *buntdb.Tx) error {
-		return tx.Ascend("", func(key, value string) bool {
-			if strings.HasPrefix(key, prefix) {
-				keys = append(keys, key)
-			}
-			return true
-		})
-	})
-	return keys, err
-}
-
 func (s *BuntDBStorage) CreatePhishlet(ctx context.Context, phishlet *models.Phishlet) error {
-	phishlet.CreatedAt = time.Now().UTC()
-	phishlet.UpdatedAt = time.Now().UTC()
-	
+	if phishlet.CreateTime.IsZero() {
+		phishlet.CreateTime = time.Now().UTC()
+	}
+	phishlet.UpdateTime = time.Now().UTC()
+
 	data, err := json.Marshal(phishlet)
 	if err != nil {
-		return fmt.Errorf("failed to marshal phishlet: %v", err)
+		return fmt.Errorf("failed to marshal phishlet: %w", err)
 	}
-	
-	key := fmt.Sprintf("phishlet:%s", phishlet.Name)
-	return s.Set(ctx, key, string(data))
+
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey(PhishletTable, phishlet.Name)
+		_, _, err := tx.Set(key, string(data), nil)
+		return err
+	})
 }
 
 func (s *BuntDBStorage) GetPhishlet(ctx context.Context, name string) (*models.Phishlet, error) {
-	key := fmt.Sprintf("phishlet:%s", name)
-	data, err := s.Get(ctx, key)
-	if err != nil {
-		return nil, fmt.Errorf("phishlet not found: %s", name)
-	}
-	
 	var phishlet models.Phishlet
-	if err := json.Unmarshal([]byte(data), &phishlet); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal phishlet: %v", err)
+	err := s.db.View(func(tx *buntdb.Tx) error {
+		key := s.genKey(PhishletTable, name)
+		val, err := tx.Get(key)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal([]byte(val), &phishlet)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get phishlet: %w", err)
 	}
-	
 	return &phishlet, nil
 }
 
-func (s *BuntDBStorage) UpdatePhishlet(ctx context.Context, phishlet *models.Phishlet) error {
-	phishlet.UpdatedAt = time.Now().UTC()
-	
-	data, err := json.Marshal(phishlet)
-	if err != nil {
-		return fmt.Errorf("failed to marshal phishlet: %v", err)
-	}
-	
-	key := fmt.Sprintf("phishlet:%s", phishlet.Name)
-	return s.Set(ctx, key, string(data))
-}
-
-func (s *BuntDBStorage) DeletePhishlet(ctx context.Context, name string) error {
-	key := fmt.Sprintf("phishlet:%s", name)
-	return s.Delete(ctx, key)
-}
-
-func (s *BuntDBStorage) ListPhishlets(ctx context.Context) ([]*models.Phishlet, error) {
-	keys, err := s.List(ctx, "phishlet:")
-	if err != nil {
-		return nil, err
-	}
-	
+func (s *BuntDBStorage) ListPhishlets(ctx context.Context, filters *PhishletFilters) ([]*models.Phishlet, error) {
 	var phishlets []*models.Phishlet
-	for _, key := range keys {
-		data, err := s.Get(ctx, key)
-		if err != nil {
-			continue
-		}
-		
-		var phishlet models.Phishlet
-		if err := json.Unmarshal([]byte(data), &phishlet); err != nil {
-			continue
-		}
-		
-		phishlets = append(phishlets, &phishlet)
+	
+	err := s.db.View(func(tx *buntdb.Tx) error {
+		count := 0
+		return tx.Ascend("phishlets_name", func(key, val string) bool {
+			if filters != nil && filters.Offset > 0 && count < filters.Offset {
+				count++
+				return true
+			}
+			
+			if filters != nil && filters.Limit > 0 && len(phishlets) >= filters.Limit {
+				return false
+			}
+
+			var phishlet models.Phishlet
+			if err := json.Unmarshal([]byte(val), &phishlet); err == nil {
+				if filters == nil || s.matchesPhishletFilters(&phishlet, filters) {
+					phishlets = append(phishlets, &phishlet)
+				}
+			}
+			count++
+			return true
+		})
+	})
+	
+	if err != nil {
+		return nil, fmt.Errorf("failed to list phishlets: %w", err)
 	}
 	
 	return phishlets, nil
 }
 
-func (s *BuntDBStorage) CreateSession(ctx context.Context, session *models.Session) error {
-	session.CreatedAt = time.Now().UTC()
-	session.UpdatedAt = time.Now().UTC()
-	
-	data, err := json.Marshal(session)
+func (s *BuntDBStorage) UpdatePhishlet(ctx context.Context, phishlet *models.Phishlet) error {
+	phishlet.UpdateTime = time.Now().UTC()
+
+	data, err := json.Marshal(phishlet)
 	if err != nil {
-		return fmt.Errorf("failed to marshal session: %v", err)
+		return fmt.Errorf("failed to marshal phishlet: %w", err)
 	}
-	
-	key := fmt.Sprintf("session:%s", session.ID)
-	return s.Set(ctx, key, string(data))
+
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey(PhishletTable, phishlet.Name)
+		_, _, err := tx.Set(key, string(data), nil)
+		return err
+	})
 }
 
-func (s *BuntDBStorage) GetSession(ctx context.Context, id string) (*models.Session, error) {
-	key := fmt.Sprintf("session:%s", id)
-	data, err := s.Get(ctx, key)
-	if err != nil {
-		return nil, fmt.Errorf("session not found: %s", id)
-	}
-	
-	var session models.Session
-	if err := json.Unmarshal([]byte(data), &session); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal session: %v", err)
-	}
-	
-	return &session, nil
+func (s *BuntDBStorage) DeletePhishlet(ctx context.Context, name string) error {
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey(PhishletTable, name)
+		_, err := tx.Delete(key)
+		return err
+	})
 }
 
-func (s *BuntDBStorage) UpdateSession(ctx context.Context, session *models.Session) error {
-	session.UpdatedAt = time.Now().UTC()
-	
-	data, err := json.Marshal(session)
-	if err != nil {
-		return fmt.Errorf("failed to marshal session: %v", err)
-	}
-	
-	key := fmt.Sprintf("session:%s", session.ID)
-	return s.Set(ctx, key, string(data))
-}
-
-func (s *BuntDBStorage) DeleteSession(ctx context.Context, id string) error {
-	key := fmt.Sprintf("session:%s", id)
-	return s.Delete(ctx, key)
-}
-
-func (s *BuntDBStorage) ListSessions(ctx context.Context) ([]*models.Session, error) {
-	keys, err := s.List(ctx, "session:")
-	if err != nil {
-		return nil, err
-	}
-	
-	var sessions []*models.Session
-	for _, key := range keys {
-		data, err := s.Get(ctx, key)
+func (s *BuntDBStorage) GetConfig(ctx context.Context) (*models.Config, error) {
+	var config models.Config
+	err := s.db.View(func(tx *buntdb.Tx) error {
+		key := s.genKey(ConfigTable, "main")
+		val, err := tx.Get(key)
+		if err == buntdb.ErrNotFound {
+			config = models.Config{
+				General: models.GeneralConfig{
+					HttpsPort: 443,
+					DnsPort:   53,
+				},
+				UpdateTime: time.Now().UTC(),
+			}
+			return nil
+		}
 		if err != nil {
-			continue
+			return err
 		}
-		
-		var session models.Session
-		if err := json.Unmarshal([]byte(data), &session); err != nil {
-			continue
-		}
-		
-		sessions = append(sessions, &session)
+		return json.Unmarshal([]byte(val), &config)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get config: %w", err)
 	}
+	return &config, nil
+}
+
+func (s *BuntDBStorage) UpdateConfig(ctx context.Context, config *models.Config) error {
+	config.UpdateTime = time.Now().UTC()
 	
-	return sessions, nil
+	data, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey(ConfigTable, "main")
+		_, _, err := tx.Set(key, string(data), nil)
+		return err
+	})
 }
 
 func (s *BuntDBStorage) CreateLure(ctx context.Context, lure *models.Lure) error {
-	lure.CreatedAt = time.Now().UTC()
-	lure.UpdatedAt = time.Now().UTC()
-	
+	if lure.CreateTime.IsZero() {
+		lure.CreateTime = time.Now().UTC()
+	}
+	lure.UpdateTime = time.Now().UTC()
+
 	data, err := json.Marshal(lure)
 	if err != nil {
-		return fmt.Errorf("failed to marshal lure: %v", err)
+		return fmt.Errorf("failed to marshal lure: %w", err)
 	}
-	
-	key := fmt.Sprintf("lure:%s", lure.ID)
-	return s.Set(ctx, key, string(data))
+
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey(LureTable, lure.ID)
+		_, _, err := tx.Set(key, string(data), nil)
+		return err
+	})
 }
 
 func (s *BuntDBStorage) GetLure(ctx context.Context, id string) (*models.Lure, error) {
-	key := fmt.Sprintf("lure:%s", id)
-	data, err := s.Get(ctx, key)
-	if err != nil {
-		return nil, fmt.Errorf("lure not found: %s", id)
-	}
-	
 	var lure models.Lure
-	if err := json.Unmarshal([]byte(data), &lure); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal lure: %v", err)
+	err := s.db.View(func(tx *buntdb.Tx) error {
+		key := s.genKey(LureTable, id)
+		val, err := tx.Get(key)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal([]byte(val), &lure)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get lure: %w", err)
 	}
-	
 	return &lure, nil
 }
 
-func (s *BuntDBStorage) UpdateLure(ctx context.Context, lure *models.Lure) error {
-	lure.UpdatedAt = time.Now().UTC()
-	
-	data, err := json.Marshal(lure)
-	if err != nil {
-		return fmt.Errorf("failed to marshal lure: %v", err)
-	}
-	
-	key := fmt.Sprintf("lure:%s", lure.ID)
-	return s.Set(ctx, key, string(data))
-}
-
-func (s *BuntDBStorage) DeleteLure(ctx context.Context, id string) error {
-	key := fmt.Sprintf("lure:%s", id)
-	return s.Delete(ctx, key)
-}
-
 func (s *BuntDBStorage) ListLures(ctx context.Context) ([]*models.Lure, error) {
-	keys, err := s.List(ctx, "lure:")
-	if err != nil {
-		return nil, err
-	}
-	
 	var lures []*models.Lure
-	for _, key := range keys {
-		data, err := s.Get(ctx, key)
-		if err != nil {
-			continue
-		}
-		
-		var lure models.Lure
-		if err := json.Unmarshal([]byte(data), &lure); err != nil {
-			continue
-		}
-		
-		lures = append(lures, &lure)
-	}
 	
+	err := s.db.View(func(tx *buntdb.Tx) error {
+		return tx.Ascend("lures_id", func(key, val string) bool {
+			var lure models.Lure
+			if err := json.Unmarshal([]byte(val), &lure); err == nil {
+				lures = append(lures, &lure)
+			}
+			return true
+		})
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to list lures: %w", err)
+	}
 	return lures, nil
 }
 
-func (s *BuntDBStorage) SetConfig(ctx context.Context, key, value string) error {
-	configKey := fmt.Sprintf("config:%s", key)
-	return s.Set(ctx, configKey, value)
-}
-
-func (s *BuntDBStorage) GetConfig(ctx context.Context, key string) (string, error) {
-	configKey := fmt.Sprintf("config:%s", key)
-	return s.Get(ctx, configKey)
-}
-
-func (s *BuntDBStorage) DeleteConfig(ctx context.Context, key string) error {
-	configKey := fmt.Sprintf("config:%s", key)
-	return s.Delete(ctx, configKey)
-}
-
-func (s *BuntDBStorage) ListConfig(ctx context.Context) (map[string]string, error) {
-	keys, err := s.List(ctx, "config:")
+func (s *BuntDBStorage) UpdateLure(ctx context.Context, lure *models.Lure) error {
+	lure.UpdateTime = time.Now().UTC()
+	
+	data, err := json.Marshal(lure)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("failed to marshal lure: %w", err)
 	}
-	
-	config := make(map[string]string)
-	for _, key := range keys {
-		value, err := s.Get(ctx, key)
-		if err != nil {
-			continue
-		}
-		
-		configKey := strings.TrimPrefix(key, "config:")
-		config[configKey] = value
-	}
-	
-	return config, nil
+
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey(LureTable, lure.ID)
+		_, _, err := tx.Set(key, string(data), nil)
+		return err
+	})
+}
+
+func (s *BuntDBStorage) DeleteLure(ctx context.Context, id string) error {
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey(LureTable, id)
+		_, err := tx.Delete(key)
+		return err
+	})
 }
 
 func (s *BuntDBStorage) CreatePhishletVersion(ctx context.Context, name string, version *PhishletVersion) error {
 	data, err := json.Marshal(version)
 	if err != nil {
-		return fmt.Errorf("failed to marshal phishlet version: %v", err)
+		return fmt.Errorf("failed to marshal phishlet version: %w", err)
 	}
 	
-	key := fmt.Sprintf("phishlet_version:%s:%s", name, version.Version)
-	return s.Set(ctx, key, string(data))
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey("phishlet_version", name+":"+version.Version)
+		_, _, err := tx.Set(key, string(data), nil)
+		return err
+	})
 }
 
 func (s *BuntDBStorage) ListPhishletVersions(ctx context.Context, name string) ([]*PhishletVersion, error) {
-	prefix := fmt.Sprintf("phishlet_version:%s:", name)
-	keys, err := s.List(ctx, prefix)
-	if err != nil {
-		return nil, err
-	}
-	
 	var versions []*PhishletVersion
-	for _, key := range keys {
-		data, err := s.Get(ctx, key)
-		if err != nil {
-			continue
-		}
-		
-		var version PhishletVersion
-		if err := json.Unmarshal([]byte(data), &version); err != nil {
-			continue
-		}
-		
-		versions = append(versions, &version)
-	}
 	
+	err := s.db.View(func(tx *buntdb.Tx) error {
+		prefix := "phishlet_version:" + name + ":"
+		return tx.Ascend("", func(key, val string) bool {
+			if !strings.HasPrefix(key, prefix) {
+				return true
+			}
+			
+			var version PhishletVersion
+			if err := json.Unmarshal([]byte(val), &version); err == nil {
+				versions = append(versions, &version)
+			}
+			return true
+		})
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to list phishlet versions: %w", err)
+	}
 	return versions, nil
 }
 
 func (s *BuntDBStorage) GetPhishletVersion(ctx context.Context, name, version string) (*models.Phishlet, error) {
-	key := fmt.Sprintf("phishlet_version:%s:%s", name, version)
-	data, err := s.Get(ctx, key)
-	if err != nil {
-		return nil, fmt.Errorf("phishlet version not found: %s@%s", name, version)
-	}
-	
 	var phishletVersion PhishletVersion
-	if err := json.Unmarshal([]byte(data), &phishletVersion); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal phishlet version: %v", err)
+	err := s.db.View(func(tx *buntdb.Tx) error {
+		key := s.genKey("phishlet_version", name+":"+version)
+		val, err := tx.Get(key)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal([]byte(val), &phishletVersion)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get phishlet version: %w", err)
 	}
 	
 	phishlet := &models.Phishlet{
@@ -363,8 +428,8 @@ func (s *BuntDBStorage) GetPhishletVersion(ctx context.Context, name, version st
 		Version:     version,
 		RedirectURL: "",
 		IsTemplate:  false,
-		CreatedAt:   phishletVersion.CreatedAt,
-		UpdatedAt:   phishletVersion.CreatedAt,
+		CreateTime:  phishletVersion.CreatedAt,
+		UpdateTime:  phishletVersion.CreatedAt,
 	}
 	
 	return phishlet, nil
@@ -373,11 +438,14 @@ func (s *BuntDBStorage) GetPhishletVersion(ctx context.Context, name, version st
 func (s *BuntDBStorage) CreateFlowSession(ctx context.Context, session *FlowSession) error {
 	data, err := json.Marshal(session)
 	if err != nil {
-		return fmt.Errorf("failed to marshal flow session: %v", err)
+		return fmt.Errorf("failed to marshal flow session: %w", err)
 	}
 	
-	key := fmt.Sprintf("flow_session:%s", session.ID)
-	return s.Set(ctx, key, string(data))
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey("flow_session", session.ID)
+		_, _, err := tx.Set(key, string(data), nil)
+		return err
+	})
 }
 
 func (s *BuntDBStorage) UpdateFlowSession(ctx context.Context, sessionID string, step string, data map[string]string) error {
@@ -401,21 +469,69 @@ func (s *BuntDBStorage) UpdateFlowSession(ctx context.Context, sessionID string,
 }
 
 func (s *BuntDBStorage) GetFlowSession(ctx context.Context, sessionID string) (*FlowSession, error) {
-	key := fmt.Sprintf("flow_session:%s", sessionID)
-	data, err := s.Get(ctx, key)
-	if err != nil {
-		return nil, fmt.Errorf("flow session not found: %s", sessionID)
-	}
-	
 	var session FlowSession
-	if err := json.Unmarshal([]byte(data), &session); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal flow session: %v", err)
+	err := s.db.View(func(tx *buntdb.Tx) error {
+		key := s.genKey("flow_session", sessionID)
+		val, err := tx.Get(key)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal([]byte(val), &session)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get flow session: %w", err)
 	}
 	
 	return &session, nil
 }
 
 func (s *BuntDBStorage) DeleteFlowSession(ctx context.Context, sessionID string) error {
-	key := fmt.Sprintf("flow_session:%s", sessionID)
-	return s.Delete(ctx, key)
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey("flow_session", sessionID)
+		_, err := tx.Delete(key)
+		return err
+	})
+}
+
+func (s *BuntDBStorage) Close() error {
+	return s.db.Close()
+}
+
+func (s *BuntDBStorage) Flush() error {
+	return s.db.Shrink()
+}
+
+func (s *BuntDBStorage) genKey(table, id string) string {
+	return table + ":" + id
+}
+
+func (s *BuntDBStorage) getPivot(t interface{}) string {
+	pivot, _ := json.Marshal(t)
+	return string(pivot)
+}
+
+func (s *BuntDBStorage) matchesSessionFilters(session *models.Session, filters *SessionFilters) bool {
+	if filters.PhishletName != "" && session.PhishletName != filters.PhishletName {
+		return false
+	}
+	if filters.Username != "" && session.Username != filters.Username {
+		return false
+	}
+	if filters.StartTime != nil && session.CreateTime.Before(*filters.StartTime) {
+		return false
+	}
+	if filters.EndTime != nil && session.CreateTime.After(*filters.EndTime) {
+		return false
+	}
+	return true
+}
+
+func (s *BuntDBStorage) matchesPhishletFilters(phishlet *models.Phishlet, filters *PhishletFilters) bool {
+	if filters.Name != "" && phishlet.Name != filters.Name {
+		return false
+	}
+	if filters.Enabled != nil && phishlet.IsEnabled != *filters.Enabled {
+		return false
+	}
+	return true
 }

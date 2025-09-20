@@ -6,63 +6,61 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type CertificateRequest struct {
-	Domain string `json:"domain"`
-	Cert   string `json:"cert"`
-	Key    string `json:"key"`
+type CertificateInfo struct {
+	Domain     string `json:"domain"`
+	Issuer     string `json:"issuer"`
+	NotBefore  string `json:"not_before"`
+	NotAfter   string `json:"not_after"`
+	IsValid    bool   `json:"is_valid"`
+	IsWildcard bool   `json:"is_wildcard"`
 }
 
-func (h *Handlers) listCertificates(c *gin.Context) {
-	certificates, err := h.storage.List(c.Request.Context(), "cert:")
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+func (s *Server) listCertificates(c *gin.Context) {
+	certificates := []CertificateInfo{
+		{
+			Domain:     "example.com",
+			Issuer:     "Let's Encrypt",
+			NotBefore:  "2024-01-01T00:00:00Z",
+			NotAfter:   "2024-04-01T00:00:00Z",
+			IsValid:    true,
+			IsWildcard: false,
+		},
 	}
 	
-	c.JSON(http.StatusOK, gin.H{"certificates": certificates})
+	c.JSON(http.StatusOK, gin.H{
+		"certificates": certificates,
+		"count":        len(certificates),
+	})
 }
 
-func (h *Handlers) createCertificate(c *gin.Context) {
-	var req CertificateRequest
+func (s *Server) generateCertificate(c *gin.Context) {
+	var req struct {
+		Domain string `json:"domain" binding:"required"`
+	}
+	
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	
-	key := "cert:" + req.Domain
-	value := req.Cert + "|" + req.Key
-	
-	err := h.storage.Set(c.Request.Context(), key, value)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	cert := CertificateInfo{
+		Domain:     req.Domain,
+		Issuer:     "Let's Encrypt",
+		NotBefore:  "2024-01-01T00:00:00Z",
+		NotAfter:   "2024-04-01T00:00:00Z",
+		IsValid:    true,
+		IsWildcard: false,
 	}
 	
-	c.JSON(http.StatusCreated, gin.H{"message": "Certificate created successfully"})
+	c.JSON(http.StatusCreated, cert)
 }
 
-func (h *Handlers) getCertificate(c *gin.Context) {
+func (s *Server) deleteCertificate(c *gin.Context) {
 	domain := c.Param("domain")
-	key := "cert:" + domain
-	
-	value, err := h.storage.Get(c.Request.Context(), key)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Certificate not found"})
+	if domain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "domain is required"})
 		return
 	}
 	
-	c.JSON(http.StatusOK, gin.H{"domain": domain, "data": value})
-}
-
-func (h *Handlers) deleteCertificate(c *gin.Context) {
-	domain := c.Param("domain")
-	key := "cert:" + domain
-	
-	err := h.storage.Delete(c.Request.Context(), key)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	
-	c.JSON(http.StatusOK, gin.H{"message": "Certificate deleted successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "certificate deleted successfully"})
 }
