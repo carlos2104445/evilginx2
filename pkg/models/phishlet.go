@@ -31,6 +31,35 @@ type Phishlet struct {
 	UnauthURL        string            `json:"unauth_url" db:"unauth_url"`
 	CreateTime       time.Time         `json:"create_time" db:"create_time"`
 	UpdateTime       time.Time         `json:"update_time" db:"update_time"`
+	
+	Conditions     []Condition     `json:"conditions,omitempty"`
+	MultiPageFlows []MultiPageFlow `json:"multi_page_flows,omitempty"`
+}
+
+type Condition struct {
+	Name    string            `json:"name"`
+	Type    string            `json:"type"`
+	Values  []string          `json:"values,omitempty"`
+	Regex   string            `json:"regex,omitempty"`
+	Actions []ConditionAction `json:"actions"`
+}
+
+type ConditionAction struct {
+	Type     string `json:"type"`
+	Value    string `json:"value,omitempty"`
+	Template string `json:"template,omitempty"`
+}
+
+type MultiPageFlow struct {
+	Name  string     `json:"name"`
+	Steps []FlowStep `json:"steps"`
+}
+
+type FlowStep struct {
+	Path        string            `json:"path"`
+	Credentials []string          `json:"credentials"`
+	NextStep    string            `json:"next_step,omitempty"`
+	Conditions  map[string]string `json:"conditions,omitempty"`
 }
 
 type ProxyHost struct {

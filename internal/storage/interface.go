@@ -46,6 +46,34 @@ type Interface interface {
 	UpdateLure(ctx context.Context, lure *models.Lure) error
 	DeleteLure(ctx context.Context, id string) error
 
+	CreatePhishletVersion(ctx context.Context, name string, version *PhishletVersion) error
+	ListPhishletVersions(ctx context.Context, name string) ([]*PhishletVersion, error)
+	GetPhishletVersion(ctx context.Context, name, version string) (*models.Phishlet, error)
+	
+	CreateFlowSession(ctx context.Context, session *FlowSession) error
+	UpdateFlowSession(ctx context.Context, sessionID string, step string, data map[string]string) error
+	GetFlowSession(ctx context.Context, sessionID string) (*FlowSession, error)
+	DeleteFlowSession(ctx context.Context, sessionID string) error
+
 	Close() error
 	Flush() error
+}
+
+type PhishletVersion struct {
+	Version     string    `json:"version"`
+	Author      string    `json:"author"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+	Hash        string    `json:"hash"`
+	Content     string    `json:"content"`
+}
+
+type FlowSession struct {
+	ID           string            `json:"id"`
+	PhishletName string            `json:"phishlet_name"`
+	FlowName     string            `json:"flow_name"`
+	CurrentStep  string            `json:"current_step"`
+	StepData     map[string]string `json:"step_data"`
+	CreatedAt    time.Time         `json:"created_at"`
+	UpdatedAt    time.Time         `json:"updated_at"`
 }

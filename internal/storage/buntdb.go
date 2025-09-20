@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/kgretzky/evilginx2/pkg/models"
@@ -222,16 +223,17 @@ func (s *BuntDBStorage) ListPhishlets(ctx context.Context, filters *PhishletFilt
 			return true
 		})
 	})
-
+	
 	if err != nil {
 		return nil, fmt.Errorf("failed to list phishlets: %w", err)
 	}
+	
 	return phishlets, nil
 }
 
 func (s *BuntDBStorage) UpdatePhishlet(ctx context.Context, phishlet *models.Phishlet) error {
 	phishlet.UpdateTime = time.Now().UTC()
-	
+
 	data, err := json.Marshal(phishlet)
 	if err != nil {
 		return fmt.Errorf("failed to marshal phishlet: %w", err)
@@ -364,6 +366,128 @@ func (s *BuntDBStorage) UpdateLure(ctx context.Context, lure *models.Lure) error
 func (s *BuntDBStorage) DeleteLure(ctx context.Context, id string) error {
 	return s.db.Update(func(tx *buntdb.Tx) error {
 		key := s.genKey(LureTable, id)
+		_, err := tx.Delete(key)
+		return err
+	})
+}
+
+func (s *BuntDBStorage) CreatePhishletVersion(ctx context.Context, name string, version *PhishletVersion) error {
+	data, err := json.Marshal(version)
+	if err != nil {
+		return fmt.Errorf("failed to marshal phishlet version: %w", err)
+	}
+	
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey("phishlet_version", name+":"+version.Version)
+		_, _, err := tx.Set(key, string(data), nil)
+		return err
+	})
+}
+
+func (s *BuntDBStorage) ListPhishletVersions(ctx context.Context, name string) ([]*PhishletVersion, error) {
+	var versions []*PhishletVersion
+	
+	err := s.db.View(func(tx *buntdb.Tx) error {
+		prefix := "phishlet_version:" + name + ":"
+		return tx.Ascend("", func(key, val string) bool {
+			if !strings.HasPrefix(key, prefix) {
+				return true
+			}
+			
+			var version PhishletVersion
+			if err := json.Unmarshal([]byte(val), &version); err == nil {
+				versions = append(versions, &version)
+			}
+			return true
+		})
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to list phishlet versions: %w", err)
+	}
+	return versions, nil
+}
+
+func (s *BuntDBStorage) GetPhishletVersion(ctx context.Context, name, version string) (*models.Phishlet, error) {
+	var phishletVersion PhishletVersion
+	err := s.db.View(func(tx *buntdb.Tx) error {
+		key := s.genKey("phishlet_version", name+":"+version)
+		val, err := tx.Get(key)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal([]byte(val), &phishletVersion)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get phishlet version: %w", err)
+	}
+	
+	phishlet := &models.Phishlet{
+		Name:        name,
+		Author:      phishletVersion.Author,
+		Version:     version,
+		RedirectURL: "",
+		IsTemplate:  false,
+		CreateTime:  phishletVersion.CreatedAt,
+		UpdateTime:  phishletVersion.CreatedAt,
+	}
+	
+	return phishlet, nil
+}
+
+func (s *BuntDBStorage) CreateFlowSession(ctx context.Context, session *FlowSession) error {
+	data, err := json.Marshal(session)
+	if err != nil {
+		return fmt.Errorf("failed to marshal flow session: %w", err)
+	}
+	
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey("flow_session", session.ID)
+		_, _, err := tx.Set(key, string(data), nil)
+		return err
+	})
+}
+
+func (s *BuntDBStorage) UpdateFlowSession(ctx context.Context, sessionID string, step string, data map[string]string) error {
+	session, err := s.GetFlowSession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	
+	session.CurrentStep = step
+	session.UpdatedAt = time.Now().UTC()
+	
+	if session.StepData == nil {
+		session.StepData = make(map[string]string)
+	}
+	
+	for k, v := range data {
+		session.StepData[k] = v
+	}
+	
+	return s.CreateFlowSession(ctx, session)
+}
+
+func (s *BuntDBStorage) GetFlowSession(ctx context.Context, sessionID string) (*FlowSession, error) {
+	var session FlowSession
+	err := s.db.View(func(tx *buntdb.Tx) error {
+		key := s.genKey("flow_session", sessionID)
+		val, err := tx.Get(key)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal([]byte(val), &session)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get flow session: %w", err)
+	}
+	
+	return &session, nil
+}
+
+func (s *BuntDBStorage) DeleteFlowSession(ctx context.Context, sessionID string) error {
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey("flow_session", sessionID)
 		_, err := tx.Delete(key)
 		return err
 	})

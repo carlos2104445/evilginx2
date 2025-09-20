@@ -7,26 +7,41 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kgretzky/evilginx2/internal/phishlet"
 	"github.com/kgretzky/evilginx2/internal/storage"
 	"github.com/kgretzky/evilginx2/pkg/models"
 )
 
 type Server struct {
-	router  *gin.Engine
-	storage storage.Interface
-	config  *models.Config
-	port    string
-	server  *http.Server
+	router       *gin.Engine
+	storage      storage.Interface
+	config       *models.Config
+	port         string
+	server       *http.Server
+	phishletRepo *phishlet.PhishletRepository
+	handlers     *Handlers
 }
 
-func NewServer(storage storage.Interface, config *models.Config, port string) *Server {
+type Handlers struct {
+	storage      storage.Interface
+	phishletRepo *phishlet.PhishletRepository
+}
+
+func NewServer(storage storage.Interface, config *models.Config, port string, phishletRepo *phishlet.PhishletRepository) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	
+	handlers := &Handlers{
+		storage:      storage,
+		phishletRepo: phishletRepo,
+	}
+	
 	s := &Server{
-		router:  gin.Default(),
-		storage: storage,
-		config:  config,
-		port:    port,
+		router:       gin.Default(),
+		storage:      storage,
+		config:       config,
+		port:         port,
+		phishletRepo: phishletRepo,
+		handlers:     handlers,
 	}
 	
 	s.setupMiddleware()
@@ -67,6 +82,13 @@ func (s *Server) setupRoutes() {
 	phishlets.PUT("/:name", s.updatePhishlet)
 	phishlets.DELETE("/:name", s.deletePhishlet)
 	phishlets.GET("/:name/stats", s.getPhishletStats)
+	
+	phishlets.GET("/:name/versions", s.listPhishletVersions)
+	phishlets.POST("/:name/versions", s.createPhishletVersion)
+	phishlets.GET("/:name/versions/:version", s.getPhishletVersion)
+	phishlets.POST("/:name/conditions/evaluate", s.evaluateConditions)
+	phishlets.GET("/:name/flows", s.getMultiPageFlows)
+	phishlets.POST("/:name/flows/:flow/step", s.updateFlowStep)
 	
 	sessions := api.Group("/sessions")
 	sessions.GET("", s.listSessions)

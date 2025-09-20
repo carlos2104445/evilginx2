@@ -12,6 +12,7 @@ import (
 
 	"github.com/kgretzky/evilginx2/internal/api"
 	"github.com/kgretzky/evilginx2/internal/control"
+	"github.com/kgretzky/evilginx2/internal/phishlet"
 	"github.com/kgretzky/evilginx2/internal/storage"
 	"github.com/kgretzky/evilginx2/pkg/models"
 )
@@ -77,7 +78,9 @@ func main() {
 		}
 	}()
 
-	apiServer := api.NewServer(storage, config, *apiPort)
+	phishletRepo := phishlet.NewPhishletRepository(storage, "")
+	
+	apiServer := api.NewServer(storage, config, *apiPort, phishletRepo)
 	if err := apiServer.Start(ctx); err != nil {
 		log.Fatalf("API server failed: %v", err)
 	}

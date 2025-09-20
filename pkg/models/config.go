@@ -50,7 +50,6 @@ type PhishletConfig struct {
 	Visible   bool   `json:"visible" db:"visible"`
 }
 
-
 type SubPhishlet struct {
 	Name       string            `json:"name" db:"name"`
 	ParentName string            `json:"parent_name" db:"parent_name"`
