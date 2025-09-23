@@ -70,7 +70,10 @@ EXPOSE 8080 8443
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/v1/health || exit 1
+
+# Set environment variable to bind to all interfaces in container
+ENV EVILGINX_BIND_IP=0.0.0.0
 
 # Run the application
 ENTRYPOINT ["./evilginx2"]

