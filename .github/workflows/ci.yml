@@ -7,8 +7,8 @@ on:
     branches: [ master, develop ]
 
 env:
-  GO_VERSION: '1.21'
-  NODE_VERSION: '18'
+  GO_VERSION: '1.24'
+  NODE_VERSION: '20'
 
 jobs:
   lint:
