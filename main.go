@@ -179,15 +179,17 @@ func main() {
 	storageDB, err := storage.NewBuntDBStorage(filepath.Join(*cfg_dir, "api.db"))
 	if err != nil {
 		log.Error("failed to create storage: %v", err)
-	} else {
-		apiServer := api.NewServer(storageDB, nil, "8080", nil)
-		go func() {
-			ctx := context.Background()
-			if err := apiServer.Start(ctx); err != nil {
-				log.Error("API server failed: %v", err)
-			}
-		}()
+		storageDB = nil
 	}
+	
+	log.Info("Starting API server on port 8080")
+	apiServer := api.NewServer(storageDB, nil, "8080", nil)
+	go func() {
+		ctx := context.Background()
+		if err := apiServer.Start(ctx); err != nil {
+			log.Error("API server failed: %v", err)
+		}
+	}()
 
 	t, err := core.NewTerminal(hp, cfg, crt_db, db, *developer_mode)
 	if err != nil {
