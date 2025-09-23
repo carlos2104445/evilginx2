@@ -77,4 +77,4 @@ ENV EVILGINX_BIND_IP=0.0.0.0
 
 # Run the application
 ENTRYPOINT ["./evilginx2"]
-CMD ["-p", "./phishlets", "-t", "./redirectors", "-debug"]
+CMD ["-p", "./phishlets", "-t", "./redirectors", "-debug", "-daemon"]
