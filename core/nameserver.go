@@ -6,27 +6,32 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/miekg/dns"
+	"golang.org/x/time/rate"
 
 	"github.com/kgretzky/evilginx2/log"
 )
 
 type Nameserver struct {
-	srv    *dns.Server
-	cfg    *Config
-	bind   string
-	serial uint32
-	ctx    context.Context
+	srv         *dns.Server
+	cfg         *Config
+	bind        string
+	serial      uint32
+	ctx         context.Context
+	rateLimiter *rate.Limiter
+	mu          sync.RWMutex
 }
 
 func NewNameserver(cfg *Config) (*Nameserver, error) {
 	o := &Nameserver{
-		serial: uint32(time.Now().Unix()),
-		cfg:    cfg,
-		bind:   fmt.Sprintf("%s:%d", cfg.GetServerBindIP(), cfg.GetDnsPort()),
-		ctx:    context.Background(),
+		serial:      uint32(time.Now().Unix()),
+		cfg:         cfg,
+		bind:        fmt.Sprintf("%s:%d", cfg.GetServerBindIP(), cfg.GetDnsPort()),
+		ctx:         context.Background(),
+		rateLimiter: rate.NewLimiter(rate.Limit(100), 200),
 	}
 
 	o.Reset()
@@ -48,6 +53,16 @@ func (o *Nameserver) Start() {
 }
 
 func (o *Nameserver) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
+	if !o.rateLimiter.Allow() {
+		log.Warning("DNS request rate limited")
+		return
+	}
+
+	if len(r.Question) == 0 {
+		log.Warning("DNS request with no questions")
+		return
+	}
+
 	m := new(dns.Msg)
 	m.SetReply(r)
 

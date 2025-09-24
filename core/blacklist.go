@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/kgretzky/evilginx2/log"
 )
@@ -20,6 +21,7 @@ type Blacklist struct {
 	masks      []*BlockIP
 	configPath string
 	verbose    bool
+	mu         sync.RWMutex
 }
 
 func NewBlacklist(path string) (*Blacklist, error) {
@@ -74,38 +76,50 @@ func (bl *Blacklist) GetStats() (int, int) {
 }
 
 func (bl *Blacklist) AddIP(ip string) error {
+	if ip == "" {
+		return fmt.Errorf("IP address cannot be empty")
+	}
+	
 	if bl.IsBlacklisted(ip) {
 		return nil
 	}
 
 	ipv4 := net.ParseIP(ip)
-	if ipv4 != nil {
-		bl.ips[ipv4.String()] = &BlockIP{ipv4: ipv4, mask: nil}
-	} else {
+	if ipv4 == nil {
 		return fmt.Errorf("invalid ip address: %s", ip)
 	}
 
-	// write to file
+	bl.mu.Lock()
+	bl.ips[ipv4.String()] = &BlockIP{ipv4: ipv4, mask: nil}
+	bl.mu.Unlock()
+
 	f, err := os.OpenFile(bl.configPath, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open blacklist file: %w", err)
 	}
 	defer f.Close()
 
 	_, err = f.WriteString(ipv4.String() + "\n")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to write to blacklist file: %w", err)
 	}
 
 	return nil
 }
 
 func (bl *Blacklist) IsBlacklisted(ip string) bool {
+	if ip == "" {
+		return false
+	}
+	
 	ipv4 := net.ParseIP(ip)
 	if ipv4 == nil {
 		return false
 	}
 
+	bl.mu.RLock()
+	defer bl.mu.RUnlock()
+	
 	if _, ok := bl.ips[ip]; ok {
 		return true
 	}
@@ -126,8 +140,22 @@ func (bl *Blacklist) IsVerbose() bool {
 }
 
 func (bl *Blacklist) IsWhitelisted(ip string) bool {
-	if ip == "127.0.0.1" {
+	if ip == "" {
+		return false
+	}
+	
+	ipv4 := net.ParseIP(ip)
+	if ipv4 == nil {
+		return false
+	}
+	
+	if ip == "127.0.0.1" || ip == "::1" {
 		return true
 	}
+	
+	if ipv4.IsLoopback() || ipv4.IsPrivate() {
+		return true
+	}
+	
 	return false
 }

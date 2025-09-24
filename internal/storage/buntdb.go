@@ -53,6 +53,14 @@ func (s *BuntDBStorage) init() error {
 }
 
 func (s *BuntDBStorage) CreateSession(ctx context.Context, session *models.Session) error {
+	if session == nil {
+		return fmt.Errorf("session cannot be nil")
+	}
+	
+	if session.ID == "" {
+		return fmt.Errorf("session ID cannot be empty")
+	}
+	
 	if session.CreateTime.IsZero() {
 		session.CreateTime = time.Now().UTC()
 	}
@@ -66,7 +74,10 @@ func (s *BuntDBStorage) CreateSession(ctx context.Context, session *models.Sessi
 	return s.db.Update(func(tx *buntdb.Tx) error {
 		key := s.genKey(SessionTable, session.ID)
 		_, _, err := tx.Set(key, string(data), nil)
-		return err
+		if err != nil {
+			return fmt.Errorf("failed to store session: %w", err)
+		}
+		return nil
 	})
 }
 
@@ -165,6 +176,14 @@ func (s *BuntDBStorage) DeleteSession(ctx context.Context, id string) error {
 }
 
 func (s *BuntDBStorage) CreatePhishlet(ctx context.Context, phishlet *models.Phishlet) error {
+	if phishlet == nil {
+		return fmt.Errorf("phishlet cannot be nil")
+	}
+	
+	if phishlet.Name == "" {
+		return fmt.Errorf("phishlet name cannot be empty")
+	}
+	
 	if phishlet.CreateTime.IsZero() {
 		phishlet.CreateTime = time.Now().UTC()
 	}
@@ -178,7 +197,10 @@ func (s *BuntDBStorage) CreatePhishlet(ctx context.Context, phishlet *models.Phi
 	return s.db.Update(func(tx *buntdb.Tx) error {
 		key := s.genKey(PhishletTable, phishlet.Name)
 		_, _, err := tx.Set(key, string(data), nil)
-		return err
+		if err != nil {
+			return fmt.Errorf("failed to store phishlet: %w", err)
+		}
+		return nil
 	})
 }
 

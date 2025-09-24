@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kgretzky/evilginx2/log"
@@ -28,6 +29,7 @@ type CertDb struct {
 	ns        *Nameserver
 	caCert    tls.Certificate
 	tlsCache  map[string]*tls.Certificate
+	cacheMtx  sync.RWMutex
 }
 
 func NewCertDb(cache_dir string, cfg *Config, ns *Nameserver) (*CertDb, error) {
@@ -86,12 +88,11 @@ func (o *CertDb) generateCertificates() error {
 	}
 
 	if err != nil {
-		// private key corrupted or not found, recreate and delete all public certificates
 		os.RemoveAll(filepath.Join(o.cache_dir, "*"))
 
 		key, err = rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
-			return fmt.Errorf("private key generation failed")
+			return fmt.Errorf("private key generation failed: %w", err)
 		}
 		pkey = pem.EncodeToMemory(&pem.Block{
 			Type:  "RSA PRIVATE KEY",
@@ -251,8 +252,7 @@ func (o *CertDb) setUnmanagedSync(verbose bool) error {
 }
 
 func (o *CertDb) reloadCertificates() error {
-	// TODO: load private certificates from disk
-	return nil
+	return o.setUnmanagedSync(true)
 }
 
 func (o *CertDb) getTLSCertificate(host string, port int) (*x509.Certificate, error) {
@@ -271,13 +271,19 @@ func (o *CertDb) getTLSCertificate(host string, port int) (*x509.Certificate, er
 }
 
 func (o *CertDb) getSelfSignedCertificate(host string, phish_host string, port int) (cert *tls.Certificate, err error) {
-	var x509ca *x509.Certificate
-	var template x509.Certificate
+	if host == "" {
+		return nil, fmt.Errorf("hostname cannot be empty")
+	}
 
+	o.cacheMtx.RLock()
 	cert, ok := o.tlsCache[host]
+	o.cacheMtx.RUnlock()
 	if ok {
 		return cert, nil
 	}
+
+	var x509ca *x509.Certificate
+	var template x509.Certificate
 
 	if x509ca, err = x509.ParseCertificate(o.caCert.Certificate[0]); err != nil {
 		return
@@ -330,7 +336,7 @@ func (o *CertDb) getSelfSignedCertificate(host string, phish_host string, port i
 	}
 
 	var pkey *rsa.PrivateKey
-	if pkey, err = rsa.GenerateKey(rand.Reader, 1024); err != nil {
+	if pkey, err = rsa.GenerateKey(rand.Reader, 2048); err != nil {
 		return
 	}
 
@@ -344,6 +350,8 @@ func (o *CertDb) getSelfSignedCertificate(host string, phish_host string, port i
 		PrivateKey:  pkey,
 	}
 
+	o.cacheMtx.Lock()
 	o.tlsCache[host] = cert
+	o.cacheMtx.Unlock()
 	return cert, nil
 }

@@ -26,6 +26,16 @@ var (
 func main() {
 	flag.Parse()
 
+	if *grpcPort == "" {
+		log.Fatal("gRPC port cannot be empty")
+	}
+	if *apiPort == "" {
+		log.Fatal("API port cannot be empty")
+	}
+	if *dbPath == "" {
+		log.Fatal("Database path cannot be empty")
+	}
+
 	fmt.Println("Starting Evilginx2 Control Service...")
 	fmt.Printf("gRPC Port: %s\n", *grpcPort)
 	fmt.Printf("API Port: %s\n", *apiPort)
