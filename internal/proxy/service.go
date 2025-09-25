@@ -415,7 +415,7 @@ func (p *ProxyService) getCertificate(hello *tls.ClientHelloInfo) (*tls.Certific
 		return nil, fmt.Errorf("no server name provided")
 	}
 	
-	cert, err := p.crtDB.getSelfSignedCertificate(hostname, "", 443)
+	cert, err := p.crtDB.GetSelfSignedCertificate(hostname, "", 443)
 	if err != nil {
 		log.Warning("Failed to get certificate for %s: %v", hostname, err)
 		return nil, err
