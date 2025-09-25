@@ -270,7 +270,7 @@ func (o *CertDb) getTLSCertificate(host string, port int) (*x509.Certificate, er
 	return state.PeerCertificates[0], nil
 }
 
-func (o *CertDb) getSelfSignedCertificate(host string, phish_host string, port int) (cert *tls.Certificate, err error) {
+func (o *CertDb) GetSelfSignedCertificate(host string, phish_host string, port int) (cert *tls.Certificate, err error) {
 	if host == "" {
 		return nil, fmt.Errorf("hostname cannot be empty")
 	}

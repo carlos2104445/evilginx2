@@ -4,13 +4,13 @@ import (
 	"github.com/kgretzky/evilginx2/internal/storage"
 )
 
-type PhishletRepository struct {
+type SimplePhishletRepository struct {
 	storage storage.Interface
 	path    string
 }
 
-func NewPhishletRepository(storage storage.Interface, path string) *PhishletRepository {
-	return &PhishletRepository{
+func NewSimplePhishletRepository(storage storage.Interface, path string) *SimplePhishletRepository {
+	return &SimplePhishletRepository{
 		storage: storage,
 		path:    path,
 	}

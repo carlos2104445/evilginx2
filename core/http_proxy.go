@@ -1555,7 +1555,7 @@ func (p *HttpProxy) TLSConfigFromCA() func(host string, ctx *goproxy.ProxyCtx) (
 				}
 			}
 
-			cert, err := p.crt_db.getSelfSignedCertificate(hostname, phish_host, port)
+			cert, err := p.crt_db.GetSelfSignedCertificate(hostname, phish_host, port)
 			if err != nil {
 				log.Error("http_proxy: %s", err)
 				return nil, err
