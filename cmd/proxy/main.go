@@ -21,6 +21,16 @@ var (
 func main() {
 	flag.Parse()
 
+	if *port == "" {
+		log.Fatal("Port cannot be empty")
+	}
+	if *controlAddr == "" {
+		log.Fatal("Control service address cannot be empty")
+	}
+	if *certPath == "" {
+		log.Fatal("Certificate directory cannot be empty")
+	}
+
 	fmt.Println("Starting Evilginx2 Proxy Service...")
 	fmt.Printf("Proxy Port: %s\n", *port)
 	fmt.Printf("Control Service: %s\n", *controlAddr)

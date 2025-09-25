@@ -54,6 +54,9 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(gin.Recovery())
 	s.router.Use(func(c *gin.Context) {
 		c.Header("Content-Type", "application/json")
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("X-Frame-Options", "DENY")
+		c.Header("X-XSS-Protection", "1; mode=block")
 		c.Next()
 	})
 	
@@ -76,43 +79,18 @@ func (s *Server) setupRoutes() {
 	api.GET("/health", s.healthCheck)
 	
 	phishlets := api.Group("/phishlets")
-	phishlets.GET("", s.listPhishlets)
-	phishlets.POST("", s.createPhishlet)
-	phishlets.GET("/:name", s.getPhishlet)
-	phishlets.PUT("/:name", s.updatePhishlet)
-	phishlets.DELETE("/:name", s.deletePhishlet)
-	phishlets.GET("/:name/stats", s.getPhishletStats)
-	
-	phishlets.GET("/:name/versions", s.listPhishletVersions)
-	phishlets.POST("/:name/versions", s.createPhishletVersion)
-	phishlets.GET("/:name/versions/:version", s.getPhishletVersion)
-	phishlets.POST("/:name/conditions/evaluate", s.evaluateConditions)
-	phishlets.GET("/:name/flows", s.getMultiPageFlows)
-	phishlets.POST("/:name/flows/:flow/step", s.updateFlowStep)
+	phishlets.GET("", s.handlers.listPhishlets)
+	phishlets.POST("", s.handlers.createPhishlet)
+	phishlets.GET("/:name", s.handlers.getPhishlet)
 	
 	sessions := api.Group("/sessions")
-	sessions.GET("", s.listSessions)
-	sessions.POST("", s.createSession)
-	sessions.GET("/:id", s.getSession)
-	sessions.PUT("/:id", s.updateSession)
-	sessions.DELETE("/:id", s.deleteSession)
-	sessions.GET("/stats", s.getSessionStats)
+	sessions.GET("", s.handlers.listSessions)
+	sessions.POST("", s.handlers.createSession)
+	sessions.GET("/:id", s.handlers.getSession)
 	
 	config := api.Group("/config")
 	config.GET("", s.getConfig)
 	config.PUT("", s.updateConfig)
-	
-	lures := api.Group("/lures")
-	lures.GET("", s.listLures)
-	lures.POST("", s.createLure)
-	lures.GET("/:id", s.getLure)
-	lures.PUT("/:id", s.updateLure)
-	lures.DELETE("/:id", s.deleteLure)
-	
-	certificates := api.Group("/certificates")
-	certificates.GET("", s.listCertificates)
-	certificates.POST("/generate", s.generateCertificate)
-	certificates.DELETE("/:domain", s.deleteCertificate)
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -151,5 +129,47 @@ func (s *Server) healthCheck(c *gin.Context) {
 		"status":    "healthy",
 		"timestamp": time.Now().UTC(),
 		"version":   "1.0.0",
+	})
+}
+
+func (s *Server) getConfig(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"config": gin.H{
+			"https_port": s.config.General.HttpsPort,
+			"dns_port":   s.config.General.DnsPort,
+		},
+	})
+}
+
+func (s *Server) updateConfig(c *gin.Context) {
+	var req struct {
+		HttpsPort int `json:"https_port"`
+		DnsPort   int `json:"dns_port"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	if req.HttpsPort < 1 || req.HttpsPort > 65535 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid HTTPS port"})
+		return
+	}
+
+	if req.DnsPort < 1 || req.DnsPort > 65535 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid DNS port"})
+		return
+	}
+
+	s.config.General.HttpsPort = req.HttpsPort
+	s.config.General.DnsPort = req.DnsPort
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Configuration updated successfully",
+		"config": gin.H{
+			"https_port": s.config.General.HttpsPort,
+			"dns_port":   s.config.General.DnsPort,
+		},
 	})
 }

@@ -157,6 +157,15 @@ func (p *ProxyService) initControlConnection() error {
 }
 
 func (p *ProxyService) initCertDB() error {
+	if p.certPath == "" {
+		return fmt.Errorf("certificate path cannot be empty")
+	}
+	
+	var err error
+	p.crtDB, err = core.NewCertDb(p.certPath, nil, nil)
+	if err != nil {
+		return fmt.Errorf("failed to initialize certificate database: %w", err)
+	}
 	return nil
 }
 
@@ -397,7 +406,22 @@ func (p *ProxyService) httpsWorker() {
 }
 
 func (p *ProxyService) getCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-	return nil, fmt.Errorf("certificate retrieval not implemented yet")
+	if p.crtDB == nil {
+		return nil, fmt.Errorf("certificate database not initialized")
+	}
+	
+	hostname := hello.ServerName
+	if hostname == "" {
+		return nil, fmt.Errorf("no server name provided")
+	}
+	
+	cert, err := p.crtDB.getSelfSignedCertificate(hostname, "", 443)
+	if err != nil {
+		log.Warning("Failed to get certificate for %s: %v", hostname, err)
+		return nil, err
+	}
+	
+	return cert, nil
 }
 
 type dumbResponseWriter struct {

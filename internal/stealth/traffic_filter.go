@@ -143,8 +143,16 @@ func (tf *TrafficFilter) checkBotUserAgent(userAgent string) bool {
 	}
 
 	for _, pattern := range botPatterns {
-		matched, _ := regexp.MatchString(pattern, userAgent)
-		if matched {
+		if len(pattern) > 1000 {
+			continue
+		}
+		
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			continue
+		}
+		
+		if re.MatchString(userAgent) {
 			return true
 		}
 	}
@@ -212,8 +220,16 @@ func (tf *TrafficFilter) checkAutomatedToolPatterns(req *http.Request) bool {
 	}
 
 	for _, pattern := range automatedPatterns {
-		matched, _ := regexp.MatchString(pattern, userAgent)
-		if matched {
+		if len(pattern) > 1000 {
+			continue
+		}
+		
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			continue
+		}
+		
+		if re.MatchString(userAgent) {
 			return true
 		}
 	}
@@ -243,8 +259,16 @@ func (tf *TrafficFilter) checkHeadlessBrowser(req *http.Request) bool {
 	}
 
 	for _, pattern := range headlessPatterns {
-		matched, _ := regexp.MatchString(pattern, userAgent)
-		if matched {
+		if len(pattern) > 1000 {
+			continue
+		}
+		
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			continue
+		}
+		
+		if re.MatchString(userAgent) {
 			return true
 		}
 	}
