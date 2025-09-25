@@ -789,6 +789,9 @@ func (c *Config) GetServerExternalIP() string {
 }
 
 func (c *Config) GetServerBindIP() string {
+	if envIP := os.Getenv("EVILGINX_BIND_IP"); envIP != "" {
+		return envIP
+	}
 	return c.general.BindIpv4
 }
 

