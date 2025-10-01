@@ -91,6 +91,18 @@ func (s *Server) setupRoutes() {
 	config := api.Group("/config")
 	config.GET("", s.getConfig)
 	config.PUT("", s.updateConfig)
+	
+	lures := api.Group("/lures")
+	lures.GET("", s.handlers.listLures)
+	lures.POST("", s.handlers.createLure)
+	lures.GET("/:id", s.handlers.getLure)
+	lures.PUT("/:id", s.handlers.updateLure)
+	lures.DELETE("/:id", s.handlers.deleteLure)
+	
+	certificates := api.Group("/certificates")
+	certificates.GET("", s.listCertificates)
+	certificates.POST("/generate", s.generateCertificate)
+	certificates.DELETE("/:domain", s.deleteCertificate)
 }
 
 func (s *Server) Start(ctx context.Context) error {

