@@ -1,3 +1,17 @@
+# Evilginx2
+
+Run Control API
+API_ADMIN_TOKEN=devtoken FRONTEND_ORIGIN=http://localhost:5173 go run ./cmd/control
+
+Docs
+See docs/API.md for endpoints.
+
+Frontend
+cd frontend
+npm install
+npm run dev
+
+Set VITE_API_BASE (default http://localhost:8081/api/v1) and use the same token to log in.
 <p align="center">
   <img alt="Evilginx2 Logo" src="https://raw.githubusercontent.com/kgretzky/evilginx2/master/media/img/evilginx2-logo-512.png" height="160" />
   <p align="center">

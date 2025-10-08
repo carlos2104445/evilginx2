@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -59,35 +61,80 @@ func (s *Server) setupMiddleware() {
 		c.Header("X-XSS-Protection", "1; mode=block")
 		c.Next()
 	})
-	
+
+	allowedOrigin := getenvDefault("FRONTEND_ORIGIN", "http://localhost:5173")
+	s.router.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	})
+
+	s.router.Use(func(c *gin.Context) {
+		if c.Request.Method == http.MethodGet && c.Request.URL.Path == "/api/v1/health" {
+			c.Next()
+			return
+		}
+		auth := c.GetHeader("Authorization")
+		token := strings.TrimPrefix(auth, "Bearer ")
+		expected := os.Getenv("API_ADMIN_TOKEN")
+		if expected == "" || token != expected {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
+		c.Next()
+	})
+
 	s.router.Use(func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
 		duration := time.Since(start)
-		
-		fmt.Printf("[API] %s %s - %d (%v)\n", 
-			c.Request.Method, 
-			c.Request.URL.Path, 
-			c.Writer.Status(), 
+		fmt.Printf("[API] %s %s - %d (%v)\n",
+			c.Request.Method,
+			c.Request.URL.Path,
+			c.Writer.Status(),
 			duration)
 	})
 }
 
 func (s *Server) setupRoutes() {
 	api := s.router.Group("/api/v1")
-	
+
 	api.GET("/health", s.healthCheck)
-	
+
 	phishlets := api.Group("/phishlets")
-	phishlets.GET("", s.handlers.listPhishlets)
-	phishlets.POST("", s.handlers.createPhishlet)
-	phishlets.GET("/:name", s.handlers.getPhishlet)
-	
+	phishlets.GET("", s.listPhishlets)
+	phishlets.POST("", s.createPhishlet)
+	phishlets.GET("/:name", s.getPhishlet)
+	phishlets.PUT("/:name", s.updatePhishlet)
+	phishlets.DELETE("/:name", s.deletePhishlet)
+	phishlets.GET("/:name/stats", s.getPhishletStats)
+
 	sessions := api.Group("/sessions")
-	sessions.GET("", s.handlers.listSessions)
-	sessions.POST("", s.handlers.createSession)
-	sessions.GET("/:id", s.handlers.getSession)
-	
+	sessions.GET("", s.listSessions)
+	sessions.POST("", s.createSession)
+	sessions.GET("/:id", s.getSession)
+	sessions.PUT("/:id", s.updateSession)
+	sessions.DELETE("/:id", s.deleteSession)
+	sessions.GET("/stats", s.getSessionStats)
+
+	lures := api.Group("/lures")
+	lures.GET("", s.listLures)
+	lures.POST("", s.createLure)
+	lures.GET("/:id", s.getLure)
+	lures.PUT("/:id", s.updateLure)
+	lures.DELETE("/:id", s.deleteLure)
+
+	certs := api.Group("/certificates")
+	certs.GET("", s.listCertificates)
+	certs.POST("", s.generateCertificate)
+	certs.DELETE("/:domain", s.deleteCertificate)
+
 	config := api.Group("/config")
 	config.GET("", s.getConfig)
 	config.PUT("", s.updateConfig)
@@ -130,4 +177,11 @@ func (s *Server) healthCheck(c *gin.Context) {
 		"timestamp": time.Now().UTC(),
 		"version":   "1.0.0",
 	})
+}
+func getenvDefault(key, def string) string {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	return v
 }
