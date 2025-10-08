@@ -39,6 +39,14 @@ Lures
 - PUT /lures/:id
 - DELETE /lures/:id
 
+Phishlet Advanced
+- GET /phishlets/:name/versions
+- POST /phishlets/:name/versions
+- GET /phishlets/:name/versions/:version
+- POST /phishlets/:name/evaluate
+- GET /phishlets/:name/flows
+- POST /phishlets/:name/flows/:flow/step
+
 Certificates (stub)
 - GET /certificates
 - POST /certificates

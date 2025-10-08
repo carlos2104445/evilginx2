@@ -114,6 +114,13 @@ func (s *Server) setupRoutes() {
 	phishlets.PUT("/:name", s.updatePhishlet)
 	phishlets.DELETE("/:name", s.deletePhishlet)
 	phishlets.GET("/:name/stats", s.getPhishletStats)
+	phishlets.GET("/:name/versions", s.listPhishletVersions)
+	phishlets.POST("/:name/versions", s.createPhishletVersion)
+	phishlets.GET("/:name/versions/:version", s.getPhishletVersion)
+	phishlets.POST("/:name/evaluate", s.evaluateConditions)
+	phishlets.GET("/:name/flows", s.getMultiPageFlows)
+	phishlets.POST("/:name/flows/:flow/step", s.updateFlowStep)
+
 
 	sessions := api.Group("/sessions")
 	sessions.GET("", s.listSessions)
