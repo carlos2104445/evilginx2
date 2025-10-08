@@ -163,17 +163,7 @@ jobs:
         go list ./... >/dev/null 2>&1 || true
         $(go env GOPATH)/bin/gosec -no-fail -fmt sarifv2 -out gosec.sarif ./... || true
         if [ ! -f gosec.sarif ]; then
-          cat > gosec.sarif <<'EOF'
-          {
-            "version": "2.1.0",
-            "runs": [
-              {
-                "tool": { "driver": { "name": "gosec", "informationUri": "https://github.com/securego/gosec", "version": "2.20.0" } },
-                "results": []
-              }
-            ]
-          }
-          EOF
+          printf '%s' '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"gosec","informationUri":"https://github.com/securego/gosec","version":"2.20.0"}},"results":[]}]}'>gosec.sarif
         fi
         if command -v jq >/dev/null 2>&1; then
           jq 'del(.runs[].results[].fixes)' gosec.sarif > gosec.cleaned.sarif || cp gosec.sarif gosec.cleaned.sarif
