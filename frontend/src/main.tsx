@@ -9,24 +9,27 @@ import Sessions from "./pages/Sessions";
 import Lures from "./pages/Lures";
 import Config from "./pages/Config";
 import Certificates from "./pages/Certificates";
+import { ToastProvider } from "./components/Toast";
 
 const root = createRoot(document.getElementById("root")!);
 
 root.render(
   <React.StrictMode>
-    <BrowserRouter>
-      <Routes>
-        <Route element={<App />}>
-          <Route path="/login" element={<Login />} />
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/phishlets" element={<Phishlets />} />
-          <Route path="/sessions" element={<Sessions />} />
-          <Route path="/lures" element={<Lures />} />
-          <Route path="/config" element={<Config />} />
-          <Route path="/certificates" element={<Certificates />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <ToastProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route element={<App />}>
+            <Route path="/login" element={<Login />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/phishlets" element={<Phishlets />} />
+            <Route path="/sessions" element={<Sessions />} />
+            <Route path="/lures" element={<Lures />} />
+            <Route path="/config" element={<Config />} />
+            <Route path="/certificates" element={<Certificates />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </ToastProvider>
   </React.StrictMode>
 );

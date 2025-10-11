@@ -11,21 +11,27 @@ export function setToken(token: string) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
-async function request(path: string, init: RequestInit = {}) {
+export function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+export async function request(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers || {});
   headers.set("Content-Type", "application/json");
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const res = await fetch(`${BASE}${path}`, { ...init, headers });
   if (res.status === 401) {
-    throw new Error("Unauthorized");
+    throw new Error("UNAUTHORIZED");
   }
   if (!res.ok) {
     const msg = await res.text();
     throw new Error(msg || res.statusText);
   }
   if (res.status === 204) return null;
-  return res.json();
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("application/json")) return res.json();
+  return res.text();
 }
 
 export const api = {

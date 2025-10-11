@@ -1,3 +1,43 @@
+# Evilginx2 API
+
+Auth
+- All endpoints require: Authorization: Bearer <token>
+- Configure token via env var: API_ADMIN_TOKEN
+
+Base URL
+- Default: http://localhost:8081/api/v1
+
+Key endpoints
+- GET /health
+- GET/PUT /config
+- Phishlets
+  - GET /phishlets
+  - POST /phishlets
+  - GET /phishlets/:name
+  - PUT /phishlets/:name
+  - DELETE /phishlets/:name
+- Sessions
+  - GET /sessions
+  - POST /sessions
+  - GET /sessions/:id
+  - PUT /sessions/:id
+  - DELETE /sessions/:id
+- Lures
+  - GET /lures
+  - POST /lures
+  - GET /lures/:id
+  - PUT /lures/:id
+  - DELETE /lures/:id
+- Certificates
+  - GET /certificates
+  - POST /certificates
+  - DELETE /certificates/:domain
+
+Notes
+- CORS: set FRONTEND_ORIGIN for browser access
+- Errors: 401 when token missing/invalid; other errors return proper HTTP codes
+
+
 # Evilginx2 REST API
 
 Base URL
