@@ -121,3 +121,30 @@ I DO NOT offer support for providing or creating phishlets. I will also NOT help
 ## License
 
 **evilginx2** is made by Kuba Gretzky ([@mrgretzky](https://twitter.com/mrgretzky)) and it's released under BSD-3 license.
+
+## Local Development
+
+Requirements
+- Go 1.24.x
+- Node.js 20.x
+- npm
+
+Backend
+- Control API only:
+  - API_ADMIN_TOKEN=devtoken FRONTEND_ORIGIN=http://localhost:5173 go run ./cmd/control
+- Control + gRPC:
+  - API_ADMIN_TOKEN=devtoken FRONTEND_ORIGIN=http://localhost:5173 go run ./cmd/control-server
+
+Smoke
+- curl -f http://localhost:8081/api/v1/health
+- curl -H "Authorization: Bearer devtoken" http://localhost:8081/api/v1/config
+
+Frontend
+- cd frontend
+- npm ci
+- npm run dev
+- Open http://localhost:5173 and login with the token you set (e.g., devtoken)
+
+Notes
+- CORS origin is taken from FRONTEND_ORIGIN.
+- Authorization is via Bearer token header; keep it secret in production.
