@@ -16,6 +16,7 @@ const (
 	PhishletTable = "phishlets"
 	ConfigTable   = "config"
 	LureTable     = "lures"
+	CertTable     = "certificates"
 )
 
 type BuntDBStorage struct {
@@ -48,6 +49,7 @@ func (s *BuntDBStorage) init() error {
 		tx.CreateIndex("sessions_phishlet", SessionTable+":*", buntdb.IndexJSON("phishlet_name"))
 		tx.CreateIndex("phishlets_name", PhishletTable+":*", buntdb.IndexJSON("name"))
 		tx.CreateIndex("lures_id", LureTable+":*", buntdb.IndexJSON("id"))
+		tx.CreateIndex("certs_domain", CertTable+":*", buntdb.IndexJSON("domain"))
 		return nil
 	})
 }
@@ -556,4 +558,76 @@ func (s *BuntDBStorage) matchesPhishletFilters(phishlet *models.Phishlet, filter
 		return false
 	}
 	return true
+}
+func (s *BuntDBStorage) CreateCertificate(ctx context.Context, cert *models.Certificate) error {
+	if cert == nil || cert.Domain == "" {
+		return fmt.Errorf("certificate or domain cannot be empty")
+	}
+	if cert.CreatedAt.IsZero() {
+		cert.CreatedAt = time.Now().UTC()
+	}
+	cert.UpdatedAt = time.Now().UTC()
+	data, err := json.Marshal(cert)
+	if err != nil {
+		return fmt.Errorf("failed to marshal certificate: %w", err)
+	}
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey(CertTable, cert.Domain)
+		_, _, err := tx.Set(key, string(data), nil)
+		return err
+	})
+}
+
+func (s *BuntDBStorage) GetCertificate(ctx context.Context, domain string) (*models.Certificate, error) {
+	var cert models.Certificate
+	err := s.db.View(func(tx *buntdb.Tx) error {
+		key := s.genKey(CertTable, domain)
+		val, err := tx.Get(key)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal([]byte(val), &cert)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get certificate: %w", err)
+	}
+	return &cert, nil
+}
+
+func (s *BuntDBStorage) ListCertificates(ctx context.Context) ([]*models.Certificate, error) {
+	var items []*models.Certificate
+	err := s.db.View(func(tx *buntdb.Tx) error {
+		return tx.Ascend("certs_domain", func(key, val string) bool {
+			var cert models.Certificate
+			if err := json.Unmarshal([]byte(val), &cert); err == nil {
+				items = append(items, &cert)
+			}
+			return true
+		})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list certificates: %w", err)
+	}
+	return items, nil
+}
+
+func (s *BuntDBStorage) UpdateCertificate(ctx context.Context, cert *models.Certificate) error {
+	cert.UpdatedAt = time.Now().UTC()
+	data, err := json.Marshal(cert)
+	if err != nil {
+		return fmt.Errorf("failed to marshal certificate: %w", err)
+	}
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey(CertTable, cert.Domain)
+		_, _, err := tx.Set(key, string(data), nil)
+		return err
+	})
+}
+
+func (s *BuntDBStorage) DeleteCertificate(ctx context.Context, domain string) error {
+	return s.db.Update(func(tx *buntdb.Tx) error {
+		key := s.genKey(CertTable, domain)
+		_, err := tx.Delete(key)
+		return err
+	})
 }

@@ -8,6 +8,7 @@ import Phishlets from "./pages/Phishlets";
 import Sessions from "./pages/Sessions";
 import Lures from "./pages/Lures";
 import Config from "./pages/Config";
+import Certificates from "./pages/Certificates";
 
 const root = createRoot(document.getElementById("root")!);
 
@@ -23,6 +24,7 @@ root.render(
           <Route path="/sessions" element={<Sessions />} />
           <Route path="/lures" element={<Lures />} />
           <Route path="/config" element={<Config />} />
+          <Route path="/certificates" element={<Certificates />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -46,6 +46,12 @@ type Interface interface {
 	UpdateLure(ctx context.Context, lure *models.Lure) error
 	DeleteLure(ctx context.Context, id string) error
 
+	CreateCertificate(ctx context.Context, cert *models.Certificate) error
+	GetCertificate(ctx context.Context, domain string) (*models.Certificate, error)
+	ListCertificates(ctx context.Context) ([]*models.Certificate, error)
+	UpdateCertificate(ctx context.Context, cert *models.Certificate) error
+	DeleteCertificate(ctx context.Context, domain string) error
+
 	CreatePhishletVersion(ctx context.Context, name string, version *PhishletVersion) error
 	ListPhishletVersions(ctx context.Context, name string) ([]*PhishletVersion, error)
 	GetPhishletVersion(ctx context.Context, name, version string) (*models.Phishlet, error)

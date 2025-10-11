@@ -1,3 +1,37 @@
+Evilginx2
+
+Quickstart (Control API + Frontend)
+
+Backend (REST API):
+- Export admin token and allowed frontend origin:
+  API_ADMIN_TOKEN=devtoken FRONTEND_ORIGIN=http://localhost:5173 go run ./cmd/control
+
+- Health and auth test:
+  curl -s localhost:8081/api/v1/health
+  curl -H "Authorization: Bearer devtoken" localhost:8081/api/v1/config
+
+Certificates (storage-managed):
+- List:
+  curl -H "Authorization: Bearer devtoken" http://localhost:8081/api/v1/certificates
+
+- Create:
+  curl -X POST -H "Authorization: Bearer devtoken" -H "Content-Type: application/json" \
+    -d '{"domain":"test.example","issuer":"Test CA","not_before":"2025-01-01T00:00:00Z","not_after":"2026-01-01T00:00:00Z","is_wildcard":false}' \
+    http://localhost:8081/api/v1/certificates
+
+- Delete:
+  curl -X DELETE -H "Authorization: Bearer devtoken" \
+    http://localhost:8081/api/v1/certificates/test.example
+
+Note: Certificates are stored and managed via API. ACME issuance/renewal is out of scope for now.
+
+Frontend (Vite + React):
+- cd frontend && npm install && npm run dev
+- Visit http://localhost:5173 and login with the admin token used above
+- Navigate to Certificates to create/list/delete certificate records
+
+For full API reference, see docs/API.md.
+
 # Evilginx2
 
 Run Control API

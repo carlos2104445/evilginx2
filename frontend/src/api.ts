@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_BASE || "http://localhost:8081/api/v1";
+const BASE = (import.meta as any)?.env?.VITE_API_BASE || "http://localhost:8081/api/v1";
 
 const TOKEN_KEY = "evil_admin_token";
 
@@ -61,4 +61,10 @@ export const api = {
   updateLure: (id: string, data: any) =>
     request(`/lures/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteLure: (id: string) => request(`/lures/${id}`, { method: "DELETE" }),
+  
+  listCertificates: () => request("/certificates"),
+  createCertificate: (data: any) =>
+    request("/certificates", { method: "POST", body: JSON.stringify(data) }),
+  deleteCertificate: (domain: string) =>
+    request(`/certificates/${encodeURIComponent(domain)}`, { method: "DELETE" }),
 };
