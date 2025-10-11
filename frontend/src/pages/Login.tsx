@@ -1,16 +1,32 @@
 import { useState } from "react";
-import { setToken } from "../api";
+import { setToken, clearToken } from "../api";
+import { api } from "../api";
 import { useNavigate } from "react-router-dom";
 
 export default function Login() {
   const [token, setTok] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const nav = useNavigate();
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) return;
-    setToken(token);
-    nav("/dashboard", { replace: true });
+    setError(null);
+    if (!token.trim()) {
+      setError("Token required");
+      return;
+    }
+    setLoading(true);
+    try {
+      setToken(token.trim());
+      await api.getConfig();
+      nav("/dashboard", { replace: true });
+    } catch {
+      clearToken();
+      setError("Invalid token");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -24,7 +40,8 @@ export default function Login() {
           onChange={(e) => setTok(e.target.value)}
           style={{ width: "100%", margin: "8px 0" }}
         />
-        <button type="submit">Enter</button>
+        {error && <div style={{ color: "#d64545", marginBottom: 8 }}>{error}</div>}
+        <button type="submit" disabled={loading}>{loading ? "Validating…" : "Enter"}</button>
       </form>
     </div>
   );
