@@ -17,7 +17,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o evilginx2 .
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -a -installsuffix cgo -o evilginx2 .
 
 # Build React frontend
 FROM node:20-alpine AS frontend-builder
