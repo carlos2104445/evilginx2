@@ -25,6 +25,7 @@ export default function App() {
           <li><Link to="/sessions">Sessions</Link></li>
           <li><Link to="/lures">Lures</Link></li>
           <li><Link to="/config">Config</Link></li>
+          <li><Link to="/certificates">Certificates</Link></li>
         </ul>
         {authed && <button onClick={logout}>Logout</button>}
       </nav>
